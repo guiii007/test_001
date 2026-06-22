@@ -91,6 +91,21 @@
   }
   .btn-reset:hover { opacity: 1; }
 
+  /* 布局选择下拉框（复用 btn 外观） */
+  .layout-sel {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+  }
+  .layout-sel:hover { background: rgba(255,255,255,0.1); }
+  .layout-sel option { background: var(--bg-2); color: var(--text); }
+
   /* 分数卡片（作为 topbar 内的 flex 项，不再使用绝对定位） */
   .score-card {
     background: var(--panel);
@@ -141,9 +156,16 @@
 </head>
 <body>
   <div class="game-wrap">
-    <!-- 顶部控制栏：标题 + 按钮 + 分数卡片，横向排列互不遮挡 -->
+    <!-- 顶部控制栏：标题 + 布局选择 + 按钮 + 分数卡片，横向排列互不遮挡 -->
     <div class="topbar">
       <div class="title">倒弹珠 <span>PLINKO</span></div>
+      <!-- 钉阵布局选择器：切换不同几何形状的钉子排列 -->
+      <select class="btn layout-sel" id="layoutSel" title="选择钉阵布局">
+        <option value="triangle">三角形</option>
+        <option value="grid">正方形网格</option>
+        <option value="diamond">菱形</option>
+        <option value="hexagon">蜂巢</option>
+      </select>
       <button class="btn btn-reset" id="resetBtn">重置游戏</button>
       <button class="btn btn-launch" id="launchBtn">发射弹珠</button>
       <!-- 实时分数卡片（作为 topbar 最后一项） -->
@@ -173,7 +195,14 @@
  * ============================================================ */
 const CONFIG = {
   // —— 钉阵布局 ——
+  // layout 可选值：
+  //   'triangle' 三角形（经典，每层钉数递增）
+  //   'grid'     正方形网格（每行钉数相同，整齐矩形）
+  //   'diamond'  菱形（中间宽、上下窄）
+  //   'hexagon'  蜂巢（网格 + 奇偶行交错偏移半个间距）
+  layout: 'triangle',
   pegRows: 10,            // 钉子层数（层数越多下落越复杂）
+  gridCols: 11,           // 网格/蜂巢布局每行钉子数（仅 grid/hexagon 用到）
   pegSpacingX: 50,        // 钉子水平间距（像素）
   pegSpacingY: 50,        // 钉子垂直间距（像素）
   pegRadius: 6,           // 钉子半径
@@ -214,31 +243,88 @@ let slotRects = []; // 底部得分槽矩形 {x, w, score}
 const scoreEl = document.getElementById('scoreVal');
 const launchBtn = document.getElementById('launchBtn');
 const resetBtn = document.getElementById('resetBtn');
+const layoutSel = document.getElementById('layoutSel'); // 布局选择下拉框
 
 /* ============================================================
- * ③ 构建钉阵（三角形排列）
- *    第 i 层（i 从 0 开始）有 i+2 个钉子，整体水平居中
- *    相邻层交错排列，形成经典 Plinko 三角阵
+ * ③ 构建钉阵（根据 CONFIG.layout 分发到不同布局）
+ *    支持四种几何形状：三角形 / 正方形网格 / 菱形 / 蜂巢
+ *    想新增布局：在下面加一个 buildXxx 函数，并在 switch 里加一个分支
  * ============================================================ */
 function buildPegs() {
   pegs = [];
+  switch (CONFIG.layout) {
+    case 'grid':    buildGridPegs();    break;
+    case 'diamond': buildDiamondPegs(); break;
+    case 'hexagon': buildHexagonPegs(); break;
+    case 'triangle':
+    default:        buildTrianglePegs(); break;
+  }
+}
+
+/* —— 三角形：每层钉数递增，整体居中（经典 Plinko） —— */
+function buildTrianglePegs() {
   const rows = CONFIG.pegRows;
   const sx = CONFIG.pegSpacingX;
   const sy = CONFIG.pegSpacingY;
   const startY = CONFIG.pegStartY;
-
   for (let row = 0; row < rows; row++) {
-    // 本层钉子数量：第 0 层 2 个，第 1 层 3 个……依次递增
-    const count = row + 2;
-    // 整层钉子的总宽度，用于居中
+    const count = row + 2;                  // 第 0 层 2 个，依次递增
     const totalW = (count - 1) * sx;
     const startX = (W - totalW) / 2;
     for (let i = 0; i < count; i++) {
-      pegs.push({
-        x: startX + i * sx,
-        y: startY + row * sy,
-        r: CONFIG.pegRadius,
-      });
+      pegs.push({ x: startX + i * sx, y: startY + row * sy, r: CONFIG.pegRadius });
+    }
+  }
+}
+
+/* —— 正方形网格：每行钉数相同，整齐矩形排列，整体居中 —— */
+function buildGridPegs() {
+  const rows = CONFIG.pegRows;
+  const cols = CONFIG.gridCols;
+  const sx = CONFIG.pegSpacingX;
+  const sy = CONFIG.pegSpacingY;
+  const startY = CONFIG.pegStartY;
+  const totalW = (cols - 1) * sx;
+  const startX = (W - totalW) / 2;
+  for (let row = 0; row < rows; row++) {
+    for (let i = 0; i < cols; i++) {
+      pegs.push({ x: startX + i * sx, y: startY + row * sy, r: CONFIG.pegRadius });
+    }
+  }
+}
+
+/* —— 菱形：钉数从 1 递增到中间最大，再递减到 1，整体居中 —— */
+function buildDiamondPegs() {
+  const rows = CONFIG.pegRows;
+  const sx = CONFIG.pegSpacingX;
+  const sy = CONFIG.pegSpacingY;
+  const startY = CONFIG.pegStartY;
+  const mid = Math.floor(rows / 2); // 中间层索引
+  for (let row = 0; row < rows; row++) {
+    // 上半部分递增，下半部分递减
+    const count = row <= mid ? (row + 2) : (rows - row + 1);
+    const totalW = (count - 1) * sx;
+    const startX = (W - totalW) / 2;
+    for (let i = 0; i < count; i++) {
+      pegs.push({ x: startX + i * sx, y: startY + row * sy, r: CONFIG.pegRadius });
+    }
+  }
+}
+
+/* —— 蜂巢：正方形网格基础上，奇数行整体偏移半个间距，形成交错 —— */
+function buildHexagonPegs() {
+  const rows = CONFIG.pegRows;
+  const cols = CONFIG.gridCols;
+  const sx = CONFIG.pegSpacingX;
+  const sy = CONFIG.pegSpacingY;
+  const startY = CONFIG.pegStartY;
+  const totalW = (cols - 1) * sx;
+  const startX = (W - totalW) / 2;
+  for (let row = 0; row < rows; row++) {
+    // 奇数行向右偏移半个间距，模拟蜂巢交错
+    const offsetX = (row % 2 === 1) ? sx / 2 : 0;
+    for (let i = 0; i < cols; i++) {
+      pegs.push({ x: startX + i * sx + offsetX, y: startY + row * sy, r: CONFIG.pegRadius });
     }
   }
 }
@@ -512,6 +598,13 @@ function resetGame() {
  * ============================================================ */
 launchBtn.addEventListener('click', launchBall);
 resetBtn.addEventListener('click', resetGame);
+
+// 切换钉阵布局：更新 CONFIG.layout → 重建钉阵 → 重置游戏
+layoutSel.addEventListener('change', () => {
+  CONFIG.layout = layoutSel.value;
+  resetGame();
+  buildPegs();
+});
 
 // 空格键也可发射，提升手感
 document.addEventListener('keydown', (e) => {
