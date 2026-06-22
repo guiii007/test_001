@@ -1800,6 +1800,8 @@ const Renderer = {
 
   _drawCar(car) {
     const ctx = this.ctx;
+    // 车辆整体放大倍数（让车在轨道上更显眼）
+    const CAR_SCALE = 2.0;
 
     // 拖尾
     ctx.save();
@@ -1807,7 +1809,7 @@ const Renderer = {
       const alpha = t.life / 0.5 * 0.3;
       ctx.fillStyle = `rgba(0, 255, 198, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(t.x, t.y, 4, 0, Math.PI * 2);
+      ctx.arc(t.x, t.y, 6, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -1815,6 +1817,7 @@ const Renderer = {
     ctx.save();
     ctx.translate(car.x, car.y);
     ctx.rotate(car.angle);
+    ctx.scale(CAR_SCALE, CAR_SCALE);
 
     // 影子（地面时）
     if (!car.airborne) {
@@ -1860,14 +1863,14 @@ const Renderer = {
     this._drawWheel(ctx, -15, 10, 8, car.wheelRotation);
     this._drawWheel(ctx, 15, 10, 8, car.wheelRotation);
 
-    // 翻车提示
+    // 翻车提示（在 scale 内部，字号相应调小）
     if (car.crashed) {
       ctx.save();
       ctx.rotate(-car.angle); // 反向旋转保持文字水平
       ctx.fillStyle = '#ff2e63';
-      ctx.font = 'bold 18px Orbitron';
+      ctx.font = 'bold 10px Orbitron';
       ctx.textAlign = 'center';
-      ctx.fillText('CRASH!', 0, -30);
+      ctx.fillText('CRASH!', 0, -22);
       ctx.restore();
     }
 
