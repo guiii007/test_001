@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>NEON DRIFT - 双阶段轨道赛车</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -195,6 +195,66 @@
   /* 平移模式下的画布光标 */
   #gameCanvas.panning { cursor: grab; }
   #gameCanvas.panning.dragging { cursor: grabbing; }
+
+  /* ============ 手机触屏控制按钮 ============ */
+  .touch-controls {
+    position: absolute;
+    bottom: 30px; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 30px;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .touch-btn {
+    pointer-events: auto;
+    width: 110px; height: 110px;
+    border-radius: 50%;
+    border: 2px solid var(--neon-cyan);
+    background: rgba(0, 255, 198, 0.12);
+    color: var(--neon-cyan);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 25px rgba(0, 255, 198, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    transition: transform 0.1s ease, background 0.1s ease;
+  }
+  .touch-btn:active,
+  .touch-btn.pressed {
+    background: rgba(0, 255, 198, 0.4);
+    transform: scale(0.92);
+    box-shadow: 0 0 40px rgba(0, 255, 198, 0.6);
+  }
+  .touch-btn .touch-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+  .touch-back {
+    border-color: var(--neon-orange);
+    color: var(--neon-orange);
+    background: rgba(255, 94, 58, 0.12);
+    box-shadow: 0 0 25px rgba(255, 94, 58, 0.3);
+  }
+  .touch-back:active,
+  .touch-back.pressed {
+    background: rgba(255, 94, 58, 0.4);
+    box-shadow: 0 0 40px rgba(255, 94, 58, 0.6);
+  }
+  /* 桌面端隐藏触屏按钮 */
+  @media (hover: hover) and (pointer: fine) {
+    .touch-controls { display: none; }
+  }
 
   /* ============ 操作提示（左下） ============ */
   .hint-panel {
@@ -486,6 +546,22 @@
   <!-- 错误提示 -->
   <div class="toast" id="toast"></div>
 
+  <!-- 手机触屏控制按钮（仅驾驶阶段显示） -->
+  <div class="touch-controls hidden" id="touchControls">
+    <button class="touch-btn touch-back" id="btnBack" aria-label="后退">
+      <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+      </svg>
+      <span class="touch-label">后退</span>
+    </button>
+    <button class="touch-btn touch-forward" id="btnForward" aria-label="前进">
+      <span class="touch-label">前进</span>
+      <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+        <path d="M4 11h12.17l-5.59-5.59L12 4l8 8-8 8-1.41-1.41L16.17 13H4v-2z"/>
+      </svg>
+    </button>
+  </div>
+
   <!-- 开始页 -->
   <div class="start-screen" id="startScreen">
     <h1>NEON DRIFT</h1>
@@ -574,7 +650,9 @@ const Config = {
   STUNT_FLIP_PENALTY: 30,
   // 镜头
   CAMERA_LERP: 0.12,
-  CAMERA_ZOOM_DRIVE: 1.2,
+  CAMERA_ZOOM_DRIVE_DESKTOP: 1.0,   // 桌面端驾驶镜头缩放
+  CAMERA_ZOOM_DRIVE_MOBILE: 0.6,    // 手机端驾驶镜头缩放（视野更宽）
+  CAMERA_OFFSET_Y: 60,              // 镜头在车辆上方的偏移
   // 颜色
   COLOR: {
     bg: '#0a0e27',
@@ -647,6 +725,12 @@ const Utils = {
     while (a > Math.PI) a -= Math.PI * 2;
     while (a < -Math.PI) a += Math.PI * 2;
     return a;
+  },
+  // 检测是否为移动端（触屏设备或窄屏）
+  isMobile() {
+    return ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0) ||
+           (window.innerWidth < 900);
   }
 };
 
@@ -1865,6 +1949,15 @@ const Game = {
     Renderer.init(canvas);
     InputManager.init(canvas);
 
+    // 阻止手机端默认手势（双指缩放、页面滚动、长按菜单）
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('gesturechange', (e) => e.preventDefault());
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.body.addEventListener('touchmove', (e) => {
+      // 允许触屏按钮自身的 touchmove（已 preventDefault）
+      e.preventDefault();
+    }, { passive: false });
+
     // UI 事件
     document.getElementById('btnStart').addEventListener('click', () => this.startGame());
     document.getElementById('btnRestart').addEventListener('click', () => this.startGame());
@@ -1872,6 +1965,9 @@ const Game = {
     document.getElementById('btnClear').addEventListener('click', () => this.clearTrack());
     document.getElementById('btnConfirm').addEventListener('click', () => this.confirmTrack());
     document.getElementById('btnPan').addEventListener('click', () => this.togglePanMode());
+
+    // 手机触屏控制按钮（前进/后退）
+    this._initTouchControls();
 
     // 阶段监听
     PhaseManager.on(Phase.BUILD, () => this._enterBuild());
@@ -1911,8 +2007,9 @@ const Game = {
         bonus.collected = true;
       }
 
-      // 镜头跟随
-      Renderer.follow(this.car.x, this.car.y - 80, Config.CAMERA_ZOOM_DRIVE);
+      // 镜头跟随（根据设备选择 zoom，手机视野更宽）
+      const zoom = Utils.isMobile() ? Config.CAMERA_ZOOM_DRIVE_MOBILE : Config.CAMERA_ZOOM_DRIVE_DESKTOP;
+      Renderer.follow(this.car.x, this.car.y - Config.CAMERA_OFFSET_Y, zoom);
 
       // 终点检测
       if (Utils.dist(this.car, this.map.end) < Config.START_END_RADIUS * 0.8) {
@@ -1921,7 +2018,8 @@ const Game = {
     } else if (this.phase === Phase.END) {
       // 结算阶段：保持镜头
       if (this.car) {
-        Renderer.follow(this.car.x, this.car.y - 80, Config.CAMERA_ZOOM_DRIVE);
+        const zoom = Utils.isMobile() ? Config.CAMERA_ZOOM_DRIVE_MOBILE : Config.CAMERA_ZOOM_DRIVE_DESKTOP;
+        Renderer.follow(this.car.x, this.car.y - Config.CAMERA_OFFSET_Y, zoom);
       }
     }
 
@@ -1937,6 +2035,7 @@ const Game = {
     document.getElementById('hintPanel').classList.remove('hidden');
     document.getElementById('controlPanel').classList.remove('hidden');
     document.getElementById('timerDisplay').classList.add('hidden');
+    document.getElementById('touchControls').classList.add('hidden');
 
     // 初始化数据
     this.map = MapGenerator.generate();
@@ -1978,6 +2077,12 @@ const Game = {
       '<strong>翘头过度会翻车</strong>，自动复位但扣分。<br>' +
       '腾空、平稳落地、坡道特技均加分。';
     document.getElementById('timerDisplay').classList.remove('hidden');
+    // 手机端显示触屏控制按钮
+    if (Utils.isMobile()) {
+      document.getElementById('touchControls').classList.remove('hidden');
+      document.getElementById('hintContent').innerHTML +=
+        '<br>手机端：长按右下<span style="color:#00ffc6">前进</span> / 左下<span style="color:#ff5e3a">后退</span>按钮';
+    }
     this._showToast('开车！冲向终点！', 'success');
 
     // 初始化车辆到起点
@@ -1986,6 +2091,10 @@ const Game = {
     this.car.x = this.map.start.x;
     this.car.y = startPoint ? startPoint.y : this.map.start.y;
     this.car.angle = startPoint ? startPoint.slope : 0;
+
+    // 立即把镜头对准车辆（避免从全图慢慢 lerp 过来时看不到车）
+    const zoom = Utils.isMobile() ? Config.CAMERA_ZOOM_DRIVE_MOBILE : Config.CAMERA_ZOOM_DRIVE_DESKTOP;
+    Renderer.setCamera(this.car.x, this.car.y - Config.CAMERA_OFFSET_Y, zoom);
 
     // 计算轨道设计分数（静态部分）
     this.score.calculateDesignScore(this.track, this.map);
@@ -2057,6 +2166,40 @@ const Game = {
     } else {
       this._showToast('已切回绘制模式', 'success');
     }
+  },
+
+  // 初始化手机触屏前进/后退按钮
+  _initTouchControls() {
+    const btnForward = document.getElementById('btnForward');
+    const btnBack = document.getElementById('btnBack');
+
+    // 通用：绑定按压/松开事件
+    const bindPress = (btn, isForward) => {
+      const press = (e) => {
+        e.preventDefault();
+        if (isForward) InputManager.forward = true;
+        else InputManager.backward = true;
+        btn.classList.add('pressed');
+      };
+      const release = (e) => {
+        e.preventDefault();
+        if (isForward) InputManager.forward = false;
+        else InputManager.backward = false;
+        btn.classList.remove('pressed');
+      };
+      // 触屏事件
+      btn.addEventListener('touchstart', press, { passive: false });
+      btn.addEventListener('touchend', release, { passive: false });
+      btn.addEventListener('touchcancel', release, { passive: false });
+      // 鼠标事件（桌面端测试用，但桌面端按钮被 CSS 隐藏）
+      btn.addEventListener('mousedown', press);
+      window.addEventListener('mouseup', release);
+      // 防止离开按钮区域时卡住按压状态
+      btn.addEventListener('mouseleave', release);
+    };
+
+    bindPress(btnForward, true);
+    bindPress(btnBack, false);
   },
 
   confirmTrack() {
