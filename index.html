@@ -176,6 +176,25 @@
     background: rgba(255, 210, 63, 0.25);
     box-shadow: 0 4px 30px rgba(255, 210, 63, 0.5);
   }
+  .btn.pan {
+    border-color: var(--neon-orange);
+    color: var(--neon-orange);
+    background: rgba(255, 94, 58, 0.08);
+    box-shadow: 0 0 15px rgba(255, 94, 58, 0.15);
+  }
+  .btn.pan:hover {
+    background: rgba(255, 94, 58, 0.2);
+    box-shadow: 0 4px 25px rgba(255, 94, 58, 0.4);
+  }
+  .btn.pan.active {
+    background: rgba(255, 94, 58, 0.35);
+    box-shadow: 0 0 30px rgba(255, 94, 58, 0.6);
+    transform: translateY(-1px);
+  }
+
+  /* 平移模式下的画布光标 */
+  #gameCanvas.panning { cursor: grab; }
+  #gameCanvas.panning.dragging { cursor: grabbing; }
 
   /* ============ 操作提示（左下） ============ */
   .hint-panel {
@@ -458,6 +477,7 @@
 
   <!-- 右下控制按钮 -->
   <div class="control-panel hidden" id="controlPanel">
+    <button class="btn" id="btnPan">移动地图</button>
     <button class="btn" id="btnUndo">撤销</button>
     <button class="btn danger" id="btnClear">清空</button>
     <button class="btn primary" id="btnConfirm">确认铺路</button>
@@ -1162,6 +1182,11 @@ const InputManager = {
   keys: { w: false, s: false },
   forward: false,
   backward: false,
+  // 平移地图模式
+  panMode: false,
+  panning: false,
+  panStart: { x: 0, y: 0 },      // 鼠标按下时的屏幕坐标
+  camStart: { x: 0, y: 0 },      // 鼠标按下时的镜头世界坐标
 
   init(canvas) {
     this.canvas = canvas;
@@ -1169,6 +1194,8 @@ const InputManager = {
     canvas.addEventListener('mousedown', (e) => this._onDown(e));
     canvas.addEventListener('mousemove', (e) => this._onMove(e));
     window.addEventListener('mouseup', (e) => this._onUp(e));
+    // 滚轮缩放（铺路阶段可用）
+    canvas.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
 
     // 触屏支持（预留）
     canvas.addEventListener('touchstart', (e) => {
@@ -1198,6 +1225,24 @@ const InputManager = {
     });
   },
 
+  // 切换平移模式
+  togglePanMode() {
+    this.panMode = !this.panMode;
+    this.canvas.classList.toggle('panning', this.panMode);
+    const btn = document.getElementById('btnPan');
+    if (btn) btn.classList.toggle('active', this.panMode);
+    return this.panMode;
+  },
+
+  // 退出平移模式（阶段切换时调用）
+  exitPanMode() {
+    this.panMode = false;
+    this.panning = false;
+    this.canvas.classList.remove('panning', 'dragging');
+    const btn = document.getElementById('btnPan');
+    if (btn) btn.classList.remove('active');
+  },
+
   _getWorldPos(e) {
     const rect = this.canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -1206,16 +1251,40 @@ const InputManager = {
     return Renderer.screenToWorld(sx, sy);
   },
 
+  _getScreenPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  },
+
   _onDown(e) {
     if (Game.phase !== Phase.BUILD) return;
     this.mouse.down = true;
     const p = this._getWorldPos(e);
     this.mouse.x = p.x; this.mouse.y = p.y;
+
+    // 平移模式：拖拽移动地图
+    if (this.panMode) {
+      this.panning = true;
+      this.canvas.classList.add('dragging');
+      const sp = this._getScreenPos(e);
+      this.panStart = sp;
+      this.camStart = { x: Renderer.camera.x, y: Renderer.camera.y };
+      return;
+    }
     Game.onDrawStart(p);
   },
   _onMove(e) {
     const p = this._getWorldPos(e);
     this.mouse.x = p.x; this.mouse.y = p.y;
+
+    // 平移中：实时更新镜头位置
+    if (this.panMode && this.panning) {
+      const sp = this._getScreenPos(e);
+      const dx = (sp.x - this.panStart.x) / Renderer.camera.zoom;
+      const dy = (sp.y - this.panStart.y) / Renderer.camera.zoom;
+      Renderer.panCamera(this.camStart.x - dx, this.camStart.y - dy);
+      return;
+    }
     if (this.mouse.down && Game.phase === Phase.BUILD) {
       Game.onDrawMove(p);
     }
@@ -1223,8 +1292,22 @@ const InputManager = {
   _onUp(e) {
     if (this.mouse.down) {
       this.mouse.down = false;
-      Game.onDrawEnd();
+      if (this.panning) {
+        this.panning = false;
+        this.canvas.classList.remove('dragging');
+      } else {
+        Game.onDrawEnd();
+      }
     }
+  },
+
+  // 滚轮缩放（以鼠标位置为中心）
+  _onWheel(e) {
+    if (Game.phase !== Phase.BUILD) return;
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const sp = this._getScreenPos(e);
+    Renderer.zoomAt(sp.x, sp.y, delta);
   }
 };
 
@@ -1302,6 +1385,28 @@ const Renderer = {
     this.camera.y = Config.WORLD_H / 2;
   },
 
+  // 平移地图到指定世界坐标（铺路阶段手动模式）
+  panCamera(x, y) {
+    this.camera.x = x;
+    this.camera.y = y;
+  },
+
+  // 以屏幕坐标 (sx, sy) 为中心缩放
+  zoomAt(sx, sy, factor) {
+    const oldZoom = this.camera.zoom;
+    // 缩放范围：铺路阶段允许 0.3x ~ 3x
+    const newZoom = Utils.clamp(oldZoom * factor, 0.3, 3.0);
+    if (Math.abs(newZoom - oldZoom) < 0.0001) return;
+    // 保持鼠标下的世界点不动：
+    // worldBefore = (sx - W/2) / oldZoom + camX
+    // worldAfter  = (sx - W/2) / newZoom + newCamX  → 令两者相等
+    const worldX = (sx - this.width / 2) / oldZoom + this.camera.x;
+    const worldY = (sy - this.height / 2) / oldZoom + this.camera.y;
+    this.camera.zoom = newZoom;
+    this.camera.x = worldX - (sx - this.width / 2) / newZoom;
+    this.camera.y = worldY - (sy - this.height / 2) / newZoom;
+  },
+
   // 应用镜头变换
   _applyCamera() {
     const ctx = this.ctx;
@@ -1331,7 +1436,7 @@ const Renderer = {
     }
     if (game.track) this._drawTrack(game.track, game.time);
 
-    if (game.phase === Phase.BUILD) {
+    if (game.phase === Phase.BUILD && !InputManager.panMode) {
       this._drawBuildCursor();
     }
 
@@ -1766,6 +1871,7 @@ const Game = {
     document.getElementById('btnUndo').addEventListener('click', () => this.undoTrack());
     document.getElementById('btnClear').addEventListener('click', () => this.clearTrack());
     document.getElementById('btnConfirm').addEventListener('click', () => this.confirmTrack());
+    document.getElementById('btnPan').addEventListener('click', () => this.togglePanMode());
 
     // 阶段监听
     PhaseManager.on(Phase.BUILD, () => this._enterBuild());
@@ -1791,8 +1897,7 @@ const Game = {
 
   update(dt) {
     if (this.phase === Phase.BUILD) {
-      // 铺路阶段：保持全图镜头
-      Renderer.fitWorld();
+      // 铺路阶段：镜头由玩家自由控制（平移/缩放），不再每帧强制 fitWorld
     } else if (this.phase === Phase.DRIVE) {
       // 驾驶阶段：跟随车辆
       this.car.update(this.track, InputManager, dt, this.score);
@@ -1852,14 +1957,20 @@ const Game = {
       '按住<strong>鼠标左键</strong>从绿色 <span class="key">START</span> 附近开始绘制轨道，' +
       '延伸至红色 <span class="key">FINISH</span>。<br>' +
       '避开<span style="color:#ff2e63">陷阱</span>，途经<span style="color:#ffd23f">金色加分点</span>可加分。<br>' +
+      '点击 <span class="key">移动地图</span> 按钮可拖拽平移，<strong>滚轮缩放</strong>查看细节。<br>' +
       '紫色段为悬空路段，可设计特技。完成后点击 <span class="key">确认铺路</span>。';
+    // 进入铺路阶段：先适配全图，并重置平移模式
+    Renderer.fitWorld();
+    InputManager.exitPanMode();
     this._showToast('开始铺设你的轨道！', 'success');
   },
 
   _enterDrive() {
     this.phase = Phase.DRIVE;
-    document.getElementById('phaseLabel').textContent = PhaseNames[Phase.DRIVE];
     document.getElementById('controlPanel').classList.add('hidden');
+    // 进入驾驶阶段：退出平移模式
+    InputManager.exitPanMode();
+    document.getElementById('phaseLabel').textContent = PhaseNames[Phase.DRIVE];
     document.getElementById('hintTitle').textContent = '驾驶阶段';
     document.getElementById('hintContent').innerHTML =
       '长按 <span class="key">W</span> 前进加速（车头会翘起）<br>' +
@@ -1935,6 +2046,17 @@ const Game = {
     if (this.phase !== Phase.BUILD) return;
     this.track.clear();
     this._showToast('已清空轨道', 'success');
+  },
+
+  // 切换"移动地图"模式
+  togglePanMode() {
+    if (this.phase !== Phase.BUILD) return;
+    const active = InputManager.togglePanMode();
+    if (active) {
+      this._showToast('移动地图模式：拖拽平移，滚轮缩放', 'success');
+    } else {
+      this._showToast('已切回绘制模式', 'success');
+    }
   },
 
   confirmTrack() {
