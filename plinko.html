@@ -91,18 +91,16 @@
   }
   .btn-reset:hover { opacity: 1; }
 
-  /* 右上角分数浮窗 */
+  /* 分数卡片（作为 topbar 内的 flex 项，不再使用绝对定位） */
   .score-card {
-    position: absolute;
-    top: 0;
-    right: 0;
     background: var(--panel);
     border: 1px solid var(--border);
     backdrop-filter: blur(8px);
     border-radius: 12px;
-    padding: 10px 18px;
+    padding: 6px 16px;
     text-align: right;
-    min-width: 120px;
+    min-width: 110px;
+    margin-left: 8px;
   }
   .score-card .label {
     font-size: 11px;
@@ -112,7 +110,7 @@
   }
   .score-card .value {
     font-family: "Courier New", monospace;
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--accent-2);
     line-height: 1.1;
@@ -143,17 +141,16 @@
 </head>
 <body>
   <div class="game-wrap">
-    <!-- 顶部控制栏 -->
+    <!-- 顶部控制栏：标题 + 按钮 + 分数卡片，横向排列互不遮挡 -->
     <div class="topbar">
       <div class="title">倒弹珠 <span>PLINKO</span></div>
       <button class="btn btn-reset" id="resetBtn">重置游戏</button>
       <button class="btn btn-launch" id="launchBtn">发射弹珠</button>
-    </div>
-
-    <!-- 右上角实时分数 -->
-    <div class="score-card">
-      <div class="label">Total Score</div>
-      <div class="value" id="scoreVal">0</div>
+      <!-- 实时分数卡片（作为 topbar 最后一项） -->
+      <div class="score-card">
+        <div class="label">Total Score</div>
+        <div class="value" id="scoreVal">0</div>
+      </div>
     </div>
 
     <!-- 游戏画布 -->
