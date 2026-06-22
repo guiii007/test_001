@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NEON DRIFT - 双阶段轨道赛车</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ 全局样式 ============ */
+  :root {
+    --bg-deep: #0a0e27;
+    --bg-mid: #1a1f3a;
+    --neon-cyan: #00ffc6;
+    --neon-orange: #ff5e3a;
+    --gold: #ffd23f;
+    --magenta: #ff2e63;
+    --purple: #9d4edd;
+    --text: #e8ecff;
+    --text-dim: #8b92b8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: radial-gradient(ellipse at center, var(--bg-mid) 0%, var(--bg-deep) 70%);
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--text);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #gameCanvas {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+  }
+
+  /* ============ HUD 顶部条 ============ */
+  .hud-top {
+    position: absolute;
+    top: 16px; left: 16px; right: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .phase-badge {
+    background: rgba(10, 14, 39, 0.75);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 8px;
+    padding: 10px 18px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 20px rgba(0, 255, 198, 0.25);
+  }
+  .phase-badge .label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--neon-cyan);
+    text-transform: uppercase;
+  }
+  .phase-badge .value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+  }
+
+  .score-panel {
+    display: flex;
+    gap: 12px;
+  }
+  .score-card {
+    background: rgba(10, 14, 39, 0.75);
+    border: 1px solid rgba(232, 236, 255, 0.15);
+    border-radius: 8px;
+    padding: 8px 14px;
+    backdrop-filter: blur(8px);
+    min-width: 110px;
+  }
+  .score-card .label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .score-card .value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 2px;
+  }
+  .score-card.time .value { color: var(--neon-cyan); }
+  .score-card.design .value { color: var(--gold); }
+  .score-card.stunt .value { color: var(--neon-orange); }
+
+  .timer-display {
+    background: rgba(10, 14, 39, 0.75);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 8px;
+    padding: 10px 22px;
+    backdrop-filter: blur(8px);
+    text-align: center;
+    box-shadow: 0 0 20px rgba(0, 255, 198, 0.25);
+  }
+  .timer-display .label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+  }
+  .timer-display .value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 24px;
+    font-weight: 900;
+    color: var(--neon-cyan);
+  }
+
+  /* ============ 控制面板（铺路阶段） ============ */
+  .control-panel {
+    position: absolute;
+    bottom: 24px; right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 10;
+  }
+  .btn {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 12px 24px;
+    border: 1px solid var(--neon-cyan);
+    background: rgba(0, 255, 198, 0.08);
+    color: var(--neon-cyan);
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 15px rgba(0, 255, 198, 0.15);
+  }
+  .btn:hover {
+    background: rgba(0, 255, 198, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 25px rgba(0, 255, 198, 0.4);
+  }
+  .btn:active { transform: translateY(0); }
+  .btn.danger {
+    border-color: var(--magenta);
+    color: var(--magenta);
+    background: rgba(255, 46, 99, 0.08);
+    box-shadow: 0 0 15px rgba(255, 46, 99, 0.15);
+  }
+  .btn.danger:hover {
+    background: rgba(255, 46, 99, 0.2);
+    box-shadow: 0 4px 25px rgba(255, 46, 99, 0.4);
+  }
+  .btn.primary {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(255, 210, 63, 0.1);
+    box-shadow: 0 0 20px rgba(255, 210, 63, 0.25);
+  }
+  .btn.primary:hover {
+    background: rgba(255, 210, 63, 0.25);
+    box-shadow: 0 4px 30px rgba(255, 210, 63, 0.5);
+  }
+
+  /* ============ 操作提示（左下） ============ */
+  .hint-panel {
+    position: absolute;
+    bottom: 24px; left: 24px;
+    background: rgba(10, 14, 39, 0.75);
+    border: 1px solid rgba(232, 236, 255, 0.15);
+    border-radius: 8px;
+    padding: 14px 18px;
+    backdrop-filter: blur(8px);
+    max-width: 320px;
+    z-index: 10;
+  }
+  .hint-panel .title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--neon-cyan);
+    margin-bottom: 8px;
+  }
+  .hint-panel .line {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .hint-panel .line strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .key {
+    display: inline-block;
+    min-width: 22px;
+    padding: 2px 6px;
+    margin: 0 2px;
+    border: 1px solid var(--neon-cyan);
+    border-radius: 4px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    color: var(--neon-cyan);
+    text-align: center;
+  }
+
+  /* ============ 开始页 ============ */
+  .start-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(ellipse at center, rgba(26, 31, 58, 0.85) 0%, rgba(10, 14, 39, 0.95) 70%);
+    z-index: 100;
+    transition: opacity 0.6s ease;
+  }
+  .start-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .start-screen h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 84px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    background: linear-gradient(135deg, var(--neon-cyan) 0%, var(--purple) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 60px rgba(0, 255, 198, 0.3);
+    margin-bottom: 8px;
+  }
+  .start-screen .subtitle {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 16px;
+    letter-spacing: 6px;
+    color: var(--text-dim);
+    margin-bottom: 50px;
+  }
+  .start-screen .description {
+    max-width: 640px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1.8;
+    margin-bottom: 40px;
+    padding: 0 24px;
+  }
+  .start-screen .description strong {
+    color: var(--neon-cyan);
+    font-weight: 600;
+  }
+  .start-btn {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    padding: 18px 60px;
+    border: 2px solid var(--neon-cyan);
+    background: rgba(0, 255, 198, 0.1);
+    color: var(--neon-cyan);
+    border-radius: 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 30px rgba(0, 255, 198, 0.3);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .start-btn:hover {
+    background: rgba(0, 255, 198, 0.25);
+    transform: scale(1.05);
+    box-shadow: 0 0 50px rgba(0, 255, 198, 0.6);
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 30px rgba(0, 255, 198, 0.3); }
+    50% { box-shadow: 0 0 50px rgba(0, 255, 198, 0.6); }
+  }
+
+  /* ============ 结算面板 ============ */
+  .result-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(ellipse at center, rgba(26, 31, 58, 0.92) 0%, rgba(10, 14, 39, 0.98) 70%);
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+  .result-screen.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .result-screen h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 48px;
+    font-weight: 900;
+    letter-spacing: 6px;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 40px rgba(0, 255, 198, 0.5);
+    margin-bottom: 8px;
+  }
+  .result-screen .grade {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 120px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--neon-orange) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    margin-bottom: 24px;
+    text-shadow: 0 0 60px rgba(255, 210, 63, 0.4);
+  }
+  .result-cards {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  .result-card {
+    background: rgba(10, 14, 39, 0.6);
+    border: 1px solid rgba(232, 236, 255, 0.15);
+    border-radius: 12px;
+    padding: 20px 28px;
+    min-width: 180px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+  }
+  .result-card .label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .result-card .value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 36px;
+    font-weight: 900;
+  }
+  .result-card.time .value { color: var(--neon-cyan); }
+  .result-card.design .value { color: var(--gold); }
+  .result-card.stunt .value { color: var(--neon-orange); }
+  .result-total {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px;
+    letter-spacing: 4px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .result-total-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 64px;
+    font-weight: 900;
+    color: var(--text);
+    text-shadow: 0 0 30px rgba(232, 236, 255, 0.4);
+    margin-bottom: 36px;
+  }
+
+  /* ============ 错误提示 ============ */
+  .toast {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(255, 46, 99, 0.15);
+    border: 1px solid var(--magenta);
+    color: var(--magenta);
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 25px rgba(255, 46, 99, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    z-index: 50;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.success {
+    background: rgba(0, 255, 198, 0.15);
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: 0 0 25px rgba(0, 255, 198, 0.4);
+  }
+
+  /* ============ 翻车震动 ============ */
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    20% { transform: translate(-6px, 4px); }
+    40% { transform: translate(5px, -3px); }
+    60% { transform: translate(-4px, -4px); }
+    80% { transform: translate(3px, 5px); }
+  }
+  body.shaking #gameCanvas { animation: shake 0.4s ease; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- 顶部 HUD -->
+  <div class="hud-top hidden" id="hudTop">
+    <div class="phase-badge">
+      <div class="label">PHASE</div>
+      <div class="value" id="phaseLabel">01 · 铺路</div>
+    </div>
+    <div class="timer-display hidden" id="timerDisplay">
+      <div class="label">TIME</div>
+      <div class="value" id="timerValue">00.00</div>
+    </div>
+    <div class="score-panel">
+      <div class="score-card time">
+        <div class="label">用时分数</div>
+        <div class="value" id="scoreTime">0</div>
+      </div>
+      <div class="score-card design">
+        <div class="label">设计分数</div>
+        <div class="value" id="scoreDesign">0</div>
+      </div>
+      <div class="score-card stunt">
+        <div class="label">特技分数</div>
+        <div class="value" id="scoreStunt">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 左下操作提示 -->
+  <div class="hint-panel hidden" id="hintPanel">
+    <div class="title" id="hintTitle">操作提示</div>
+    <div class="line" id="hintContent"></div>
+  </div>
+
+  <!-- 右下控制按钮 -->
+  <div class="control-panel hidden" id="controlPanel">
+    <button class="btn" id="btnUndo">撤销</button>
+    <button class="btn danger" id="btnClear">清空</button>
+    <button class="btn primary" id="btnConfirm">确认铺路</button>
+  </div>
+
+  <!-- 错误提示 -->
+  <div class="toast" id="toast"></div>
+
+  <!-- 开始页 -->
+  <div class="start-screen" id="startScreen">
+    <h1>NEON DRIFT</h1>
+    <div class="subtitle">双阶段轨道赛车</div>
+    <div class="description">
+      你将依次完成两个阶段：<strong>第一阶段</strong>用鼠标在地图上自由铺设一条连通起点与终点的轨道，避开陷阱、途经加分点；
+      <strong>第二阶段</strong>驾驶赛车沿自铺轨道冲向终点，仅用 <strong>W</strong> 前进、<strong>S</strong> 后退控制车身平衡。
+      最终总分 = 用时分数 + 轨道设计分数 + 驾驶特技分数。
+    </div>
+    <button class="start-btn" id="btnStart">开始游戏</button>
+  </div>
+
+  <!-- 结算面板 -->
+  <div class="result-screen" id="resultScreen">
+    <h2>RACE COMPLETE</h2>
+    <div class="grade" id="resultGrade">S</div>
+    <div class="result-cards">
+      <div class="result-card time">
+        <div class="label">用时分数</div>
+        <div class="value" id="resultTime">0</div>
+      </div>
+      <div class="result-card design">
+        <div class="label">设计分数</div>
+        <div class="value" id="resultDesign">0</div>
+      </div>
+      <div class="result-card stunt">
+        <div class="label">特技分数</div>
+        <div class="value" id="resultStunt">0</div>
+      </div>
+    </div>
+    <div class="result-total">TOTAL SCORE</div>
+    <div class="result-total-value" id="resultTotal">0</div>
+    <button class="start-btn" id="btnRestart">再玩一次</button>
+  </div>
+
+<script>
+/* ============================================================
+ * NEON DRIFT - 双阶段轨道赛车游戏
+ * 单文件 HTML5 Canvas + 原生 JavaScript
+ * 模块化分层：Config / Registry / MapGenerator / TrackBuilder
+ *           Collision / Physics / CarController / ScoreSystem
+ *           InputManager / Renderer / PhaseManager / Game
+ * ============================================================ */
+
+'use strict';
+
+/* ============ 1. 全局配置 Config ============ */
+const Config = {
+  // 世界尺寸（铺路阶段的全图）
+  WORLD_W: 3200,
+  WORLD_H: 1600,
+  // 物理参数
+  GRAVITY: 1400,            // 重力加速度（px/s²）
+  ENGINE_FORCE: 1600,       // W 键引擎推力
+  BRAKE_FORCE: 1200,        // S 键制动力
+  FRICTION: 0.985,          // 地面摩擦
+  AIR_FRICTION: 0.995,      // 空气阻力
+  MAX_SPEED: 900,           // 最大速度
+  TILT_RATE: 1.8,           // 翘头/翘尾角速度（rad/s）
+  TILT_RECOVERY: 4.0,       // 角度回正速率
+  FLIP_THRESHOLD: Math.PI * 0.55, // 翻车角度阈值（约99°）
+  RESET_DELAY: 0.9,         // 翻车复位延迟（秒）
+  AIRBORNE_THRESHOLD: 28,   // 腾空判定阈值（px）
+  // 轨道绘制
+  TRACK_SAMPLE_DIST: 10,    // 轨道点采样间隔
+  TRACK_WIDTH: 14,          // 轨道宽度
+  START_END_RADIUS: 60,     // 起终点连通半径
+  TRAP_RADIUS: 38,          // 陷阱半径
+  BONUS_RADIUS: 32,         // 加分点半径
+  // 计分
+  TIME_BASE: 1000,
+  TIME_PER_SEC: 5,
+  TIME_OVERTIME: 120,
+  TIME_OVERTIME_PENALTY: 50,
+  SHORTCUT_BONUS: 200,
+  DESIGN_BONUS_POINT: 100,
+  DESIGN_AIR_PER_PX: 0.5,
+  DESIGN_VARIANCE_FACTOR: 0.01,
+  DESIGN_STUNT_SEG: 50,
+  DESIGN_MONOTONY_PENALTY: 100,
+  DESIGN_REDUNDANCY_PENALTY: 150,
+  STUNT_AIR: 30,
+  STUNT_WHEELIE: 20,
+  STUNT_LANDING: 50,
+  STUNT_SLOPE_PER_SEC: 10,
+  STUNT_FLIP_PENALTY: 30,
+  // 镜头
+  CAMERA_LERP: 0.12,
+  CAMERA_ZOOM_DRIVE: 1.2,
+  // 颜色
+  COLOR: {
+    bg: '#0a0e27',
+    grid: 'rgba(0, 255, 198, 0.06)',
+    track: '#00ffc6',
+    trackGlow: 'rgba(0, 255, 198, 0.4)',
+    trackAir: '#9d4edd',
+    start: '#00ffc6',
+    end: '#ff5e3a',
+    trap: '#ff2e63',
+    bonus: '#ffd23f',
+    car: '#00ffc6',
+    carWheel: '#ffd23f',
+    carDetail: '#ff5e3a'
+  }
+};
+
+/* ============ 2. 阶段枚举 ============ */
+const Phase = { START: 0, BUILD: 1, DRIVE: 2, END: 3 };
+const PhaseNames = {
+  [Phase.START]: '准备',
+  [Phase.BUILD]: '01 · 铺路',
+  [Phase.DRIVE]: '02 · 驾驶',
+  [Phase.END]: '结算'
+};
+
+/* ============ 3. 拓展接口 Registry ============ */
+// 预留机关/关卡/皮肤/音效注册接口，方便后续迭代
+const Registry = {
+  traps: {},       // 自定义陷阱类型
+  bonuses: {},     // 自定义加分点类型
+  levels: [],      // 关卡配置
+  carSkins: [],    // 车辆皮肤
+  soundHooks: {},  // 音效事件钩子
+
+  registerTrap(name, def) { this.traps[name] = def; },
+  registerBonus(name, def) { this.bonuses[name] = def; },
+  loadLevel(config) { this.levels.push(config); },
+  setCarSkin(skin) { this.carSkins.push(skin); },
+  on(event, fn) {
+    if (!this.soundHooks[event]) this.soundHooks[event] = [];
+    this.soundHooks[event].push(fn);
+  },
+  emit(event, ...args) {
+    (this.soundHooks[event] || []).forEach(fn => fn(...args));
+  }
+};
+
+/* ============ 4. 工具函数 Utils ============ */
+const Utils = {
+  dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); },
+  dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; },
+  lerp(a, b, t) { return a + (b - a) * t; },
+  clamp(v, min, max) { return Math.max(min, Math.min(max, v)); },
+  rand(min, max) { return min + Math.random() * (max - min); },
+  randInt(min, max) { return Math.floor(this.rand(min, max + 1)); },
+  pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; },
+  // 点到线段距离
+  pointToSegment(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return { dist: this.dist(p, a), t: 0, proj: { x: a.x, y: a.y } };
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = this.clamp(t, 0, 1);
+    const proj = { x: a.x + dx * t, y: a.y + dy * t };
+    return { dist: this.dist(p, proj), t, proj };
+  },
+  // 角度归一化到 [-π, π]
+  normalizeAngle(a) {
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+};
+
+/* ============ 5. 地图生成 MapGenerator ============ */
+const MapGenerator = {
+  // 生成一张新地图：起点、终点、陷阱、加分点
+  generate() {
+    const W = Config.WORLD_W, H = Config.WORLD_H;
+    const start = { x: 180, y: H * 0.55 };
+    const end = { x: W - 180, y: H * 0.55 };
+
+    // 生成陷阱（避开起终点附近）
+    const traps = [];
+    const trapCount = Utils.randInt(10, 14);
+    let attempts = 0;
+    while (traps.length < trapCount && attempts < 200) {
+      attempts++;
+      const x = Utils.rand(400, W - 400);
+      const y = Utils.rand(H * 0.25, H * 0.85);
+      // 避开起终点
+      if (Utils.dist({ x, y }, start) < 200 || Utils.dist({ x, y }, end) < 200) continue;
+      // 避开已有陷阱
+      let tooClose = false;
+      for (const t of traps) {
+        if (Utils.dist({ x, y }, t) < 140) { tooClose = true; break; }
+      }
+      if (tooClose) continue;
+      traps.push({
+        x, y,
+        r: Config.TRAP_RADIUS,
+        type: Utils.pick(['spike', 'pit', 'wall']),
+        rot: Utils.rand(0, Math.PI * 2)
+      });
+    }
+
+    // 生成加分点位
+    const bonuses = [];
+    const bonusCount = Utils.randInt(7, 10);
+    attempts = 0;
+    while (bonuses.length < bonusCount && attempts < 200) {
+      attempts++;
+      const x = Utils.rand(500, W - 500);
+      const y = Utils.rand(H * 0.2, H * 0.8);
+      // 避开陷阱
+      let conflict = false;
+      for (const t of traps) {
+        if (Utils.dist({ x, y }, t) < 100) { conflict = true; break; }
+      }
+      for (const b of bonuses) {
+        if (Utils.dist({ x, y }, b) < 180) { conflict = true; break; }
+      }
+      if (conflict) continue;
+      bonuses.push({
+        x, y,
+        r: Config.BONUS_RADIUS,
+        type: Utils.pick(['float', 'ramp', 'shortcut', 'stunt']),
+        collected: false,
+        pulse: Utils.rand(0, Math.PI * 2)
+      });
+    }
+
+    return { start, end, traps, bonuses, width: W, height: H };
+  }
+};
+
+/* ============ 6. 碰撞检测 Collision ============ */
+const Collision = {
+  // 点是否落在陷阱内
+  pointInTraps(p, traps, margin = 0) {
+    for (const t of traps) {
+      if (Utils.dist2(p, t) < (t.r + margin) * (t.r + margin)) return t;
+    }
+    return null;
+  },
+  // 线段是否穿过陷阱
+  segmentHitsTraps(a, b, traps) {
+    for (const t of traps) {
+      const res = Utils.pointToSegment(t, a, b);
+      if (res.dist < t.r) return t;
+    }
+    return null;
+  },
+  // 点是否在加分点内
+  pointInBonus(p, bonuses) {
+    for (const b of bonuses) {
+      if (!b.collected && Utils.dist2(p, b) < b.r * b.r) return b;
+    }
+    return null;
+  }
+};
+
+/* ============ 7. 轨道构建 TrackBuilder ============ */
+// 维护轨道点序列、校验、锁定
+class TrackBuilder {
+  constructor() {
+    this.points = [];     // [{x, y, isAir}]
+    this.segments = [];   // [{a, b, length, slope, isAir, airHeight}]
+    this.locked = false;
+    this.bonusCollected = new Set();  // 驾驶阶段收集的加分点索引
+  }
+
+  reset() {
+    this.points = [];
+    this.segments = [];
+    this.locked = false;
+    this.bonusCollected.clear();
+  }
+
+  // 尝试添加一个点，返回 { ok, error }
+  tryAddPoint(p, map) {
+    if (this.locked) return { ok: false, error: '轨道已锁定' };
+    // 检查陷阱碰撞
+    const trap = Collision.pointInTraps(p, map.traps);
+    if (trap) return { ok: false, error: '触碰陷阱！请绕开' };
+    // 与上一点连线检查陷阱
+    if (this.points.length > 0) {
+      const prev = this.points[this.points.length - 1];
+      const segTrap = Collision.segmentHitsTraps(prev, p, map.traps);
+      if (segTrap) return { ok: false, error: '轨道穿过陷阱！' };
+      // 采样间隔
+      if (Utils.dist(prev, p) < Config.TRACK_SAMPLE_DIST) return { ok: false, error: 'too_close' };
+    }
+    // 判断是否悬空：若距地面参考线较远则视为悬空
+    const isAir = this._isAirPoint(p, map);
+    this.points.push({ x: p.x, y: p.y, isAir });
+    return { ok: true };
+  }
+
+  // 简化判定：y 在地图上 1/3 以上视为悬空（高空路段）
+  _isAirPoint(p, map) {
+    return p.y < map.height * 0.35;
+  }
+
+  undo() {
+    if (this.locked || this.points.length === 0) return;
+    this.points.pop();
+  }
+
+  clear() {
+    if (this.locked) return;
+    this.points = [];
+  }
+
+  // 校验是否连通起点与终点
+  validate(map) {
+    if (this.points.length < 2) return { ok: false, error: '轨道过短' };
+    const first = this.points[0];
+    const last = this.points[this.points.length - 1];
+    if (Utils.dist(first, map.start) > Config.START_END_RADIUS) {
+      return { ok: false, error: '起点未连接！请从绿色起点附近开始绘制' };
+    }
+    if (Utils.dist(last, map.end) > Config.START_END_RADIUS) {
+      return { ok: false, error: '终点未连接！请将轨道延伸至红色终点' };
+    }
+    return { ok: true };
+  }
+
+  // 锁定轨道，预计算段信息
+  lock(map) {
+    const v = this.validate(map);
+    if (!v.ok) return v;
+    // 在起点和终点处插入连接点
+    this.points.unshift({ x: map.start.x, y: map.start.y, isAir: false });
+    this.points.push({ x: map.end.x, y: map.end.y, isAir: false });
+
+    this.segments = [];
+    for (let i = 0; i < this.points.length - 1; i++) {
+      const a = this.points[i], b = this.points[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      const slope = Math.atan2(dy, dx);
+      const isAir = a.isAir || b.isAir;
+      const airHeight = isAir ? Math.min(a.y, b.y) : 0;
+      this.segments.push({ a, b, length, slope, isAir, airHeight });
+    }
+    this.locked = true;
+    return { ok: true };
+  }
+
+  // 计算轨道总长度
+  totalLength() {
+    return this.segments.reduce((s, seg) => s + seg.length, 0);
+  }
+
+  // 计算高度方差（用于设计评分）
+  heightVariance() {
+    if (this.points.length < 2) return 0;
+    const ys = this.points.map(p => p.y);
+    const mean = ys.reduce((s, y) => s + y, 0) / ys.length;
+    const variance = ys.reduce((s, y) => s + (y - mean) * (y - mean), 0) / ys.length;
+    return variance;
+  }
+
+  // 悬空段总长度
+  airLength() {
+    return this.segments.filter(s => s.isAir).reduce((sum, s) => sum + s.length, 0);
+  }
+
+  // 特技段数（坡度 > 45°）
+  stuntSegmentCount() {
+    return this.segments.filter(s => Math.abs(s.slope) > Math.PI / 4).length;
+  }
+
+  // 途经加分点数量（驾驶阶段收集）
+  bonusCount() {
+    return this.bonusCollected.size;
+  }
+
+  // 根据世界 x 坐标查找对应轨道点（用于车辆贴合）
+  getTrackPointAt(x) {
+    if (this.segments.length === 0) return null;
+    // 找到包含 x 的段
+    for (const seg of this.segments) {
+      if ((seg.a.x <= x && x <= seg.b.x) || (seg.b.x <= x && x <= seg.a.x)) {
+        const dx = seg.b.x - seg.a.x;
+        if (Math.abs(dx) < 0.001) {
+          return { x: seg.a.x, y: seg.a.y, slope: seg.slope, seg };
+        }
+        const t = (x - seg.a.x) / dx;
+        const y = seg.a.y + (seg.b.y - seg.a.y) * t;
+        return { x, y, slope: seg.slope, seg };
+      }
+    }
+    // 超出范围，返回最近端点
+    if (x <= this.segments[0].a.x) {
+      const seg = this.segments[0];
+      return { x: seg.a.x, y: seg.a.y, slope: seg.slope, seg };
+    }
+    const last = this.segments[this.segments.length - 1];
+    return { x: last.b.x, y: last.b.y, slope: last.slope, seg: last };
+  }
+}
+
+/* ============ 8. 物理引擎 Physics ============ */
+// 登山赛车风格物理：重力 + 引力沿轨道切线 + 翘头/翘尾 + 翻车复位
+const Physics = {
+  // 更新车辆物理
+  update(car, track, input, dt, scoreSystem) {
+    if (car.crashed) {
+      car.crashTimer -= dt;
+      if (car.crashTimer <= 0) {
+        this._resetCar(car, track);
+      }
+      return;
+    }
+
+    // 找到当前轨道点
+    const trackPoint = track.getTrackPointAt(car.x);
+    if (!trackPoint) return;
+
+    // 重力始终作用
+    car.velocityY += Config.GRAVITY * dt;
+
+    // 判断是否在地面：car.y >= trackY 表示接触或穿透轨道（屏幕坐标 y 向下）
+    const trackY = trackPoint.y;
+    const wasAirborne = car.airborne;
+
+    if (car.y >= trackY - 1) {
+      // 接触轨道 → 贴合 + 沿切线运动
+      car.y = trackY;
+      car.airborne = false;
+
+      // 落地事件
+      if (wasAirborne) {
+        const airTime = car.airTime;
+        car.airTime = 0;
+        if (airTime > 0.3) {
+          scoreSystem.addStunt(Config.STUNT_AIR, '腾空飞跃');
+        }
+        if (airTime > 1.0) {
+          scoreSystem.addStunt(Config.STUNT_LANDING, '高空平稳落地');
+        }
+        // 落地时角度对齐轨道
+        car.angle = trackPoint.slope;
+        car.angularVelocity = 0;
+      }
+
+      // 沿轨道切线方向
+      const tangentX = Math.cos(trackPoint.slope);
+      const tangentY = Math.sin(trackPoint.slope);
+
+      // 将当前速度投影到切线方向
+      const speedAlong = car.velocityX * tangentX + car.velocityY * tangentY;
+
+      // 引擎力
+      let engineForce = 0;
+      if (input.forward) engineForce += Config.ENGINE_FORCE;
+      if (input.backward) engineForce -= Config.BRAKE_FORCE;
+
+      // 重力沿切线分量（下坡加速、上坡减速）
+      const gravityTangent = Config.GRAVITY * Math.sin(trackPoint.slope);
+
+      // 合力 → 加速度 → 速度
+      const totalForce = engineForce + gravityTangent;
+      let newSpeed = speedAlong + totalForce * dt;
+      newSpeed *= Config.FRICTION;
+      newSpeed = Utils.clamp(newSpeed, -Config.MAX_SPEED, Config.MAX_SPEED);
+
+      // 速度沿切线方向
+      car.velocityX = tangentX * newSpeed;
+      car.velocityY = tangentY * newSpeed;
+
+      // 翘头/翘尾控制
+      if (input.forward) {
+        car.angularVelocity -= Config.TILT_RATE * dt;
+      } else if (input.backward) {
+        car.angularVelocity += Config.TILT_RATE * dt;
+      } else {
+        const targetAngle = trackPoint.slope;
+        const diff = Utils.normalizeAngle(targetAngle - car.angle);
+        car.angularVelocity += diff * Config.TILT_RECOVERY * dt;
+        car.angularVelocity *= 0.85;
+      }
+
+      // 坡道特技行驶加分（坡度 > 45°）
+      if (Math.abs(trackPoint.slope) > Math.PI / 4) {
+        scoreSystem.addStunt(Config.STUNT_SLOPE_PER_SEC * dt, '坡道特技');
+      }
+      // 极限翘头行驶加分
+      const tiltAngle = Math.abs(Utils.normalizeAngle(car.angle - trackPoint.slope));
+      if (tiltAngle > Math.PI / 4) {
+        car.wheelieTimer += dt;
+        if (car.wheelieTimer >= 0.5) {
+          scoreSystem.addStunt(Config.STUNT_WHEELIE, '极限翘头');
+          car.wheelieTimer = 0;
+        }
+      } else {
+        car.wheelieTimer = 0;
+      }
+    } else {
+      // 腾空状态：car.y < trackY（在轨道上方）
+      car.airborne = true;
+      car.airTime += dt;
+
+      // 空气阻力
+      car.velocityX *= Config.AIR_FRICTION;
+      car.velocityY *= Config.AIR_FRICTION;
+
+      // 空中翘头/翘尾控制（减弱）
+      if (input.forward) {
+        car.angularVelocity -= Config.TILT_RATE * 0.7 * dt;
+      }
+      if (input.backward) {
+        car.angularVelocity += Config.TILT_RATE * 0.7 * dt;
+      }
+      car.angularVelocity *= 0.99;
+    }
+
+    // 更新位置
+    car.x += car.velocityX * dt;
+    car.y += car.velocityY * dt;
+    car.angle += car.angularVelocity * dt;
+
+    // 翻车判定
+    const tiltFromTrack = Math.abs(Utils.normalizeAngle(car.angle - trackPoint.slope));
+    if (tiltFromTrack > Config.FLIP_THRESHOLD) {
+      this._crash(car, scoreSystem);
+    }
+
+    // 防止车辆飞出地图
+    car.x = Utils.clamp(car.x, 0, Config.WORLD_W);
+    car.y = Utils.clamp(car.y, -200, Config.WORLD_H + 200);
+  },
+
+  _crash(car, scoreSystem) {
+    car.crashed = true;
+    car.crashTimer = Config.RESET_DELAY;
+    car.flipCount++;
+    scoreSystem.addStunt(-Config.STUNT_FLIP_PENALTY, '翻车');
+    Registry.emit('flip');
+  },
+
+  _resetCar(car, track) {
+    const trackPoint = track.getTrackPointAt(car.x);
+    if (trackPoint) {
+      car.y = trackPoint.y;
+      car.angle = trackPoint.slope;
+    }
+    car.velocityX = 0;
+    car.velocityY = 0;
+    car.angularVelocity = 0;
+    car.crashed = false;
+    car.crashTimer = 0;
+    car.airborne = false;
+    car.airTime = 0;
+    car.wheelieTimer = 0;
+  }
+};
+
+/* ============ 9. 车辆控制 CarController ============ */
+class CarController {
+  constructor() {
+    this.reset({ x: 0, y: 0 }, 0);
+  }
+
+  reset(startPos, startAngle) {
+    this.x = startPos.x;
+    this.y = startPos.y;
+    this.angle = startAngle;
+    this.velocityX = 0;
+    this.velocityY = 0;
+    this.angularVelocity = 0;
+    this.airborne = false;
+    this.airTime = 0;
+    this.wheelieTimer = 0;
+    this.crashed = false;
+    this.crashTimer = 0;
+    this.flipCount = 0;
+    this.wheelRotation = 0;
+    this.trail = []; // 拖尾粒子
+  }
+
+  update(track, input, dt, scoreSystem) {
+    Physics.update(this, track, input, dt, scoreSystem);
+    // 车轮旋转（基于水平速度）
+    this.wheelRotation += this.velocityX * dt * 0.05;
+    // 拖尾
+    if (Math.abs(this.velocityX) > 50 && !this.crashed) {
+      this.trail.push({ x: this.x, y: this.y, life: 0.5 });
+      if (this.trail.length > 30) this.trail.shift();
+    }
+    this.trail.forEach(t => t.life -= dt);
+    this.trail = this.trail.filter(t => t.life > 0);
+  }
+}
+
+/* ============ 10. 计分系统 ScoreSystem ============ */
+class ScoreSystem {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.timeScore = Config.TIME_BASE;
+    this.designScore = 0;
+    this.stuntScore = 0;
+    this.totalTime = 0;
+    this.designCalculated = false;
+    this.stuntEvents = []; // 用于实时显示
+    this.lastStuntEvent = null;
+    this.lastStuntEventTime = 0;
+  }
+
+  // 实时更新用时分数
+  updateTime(dt) {
+    this.totalTime += dt;
+    let score = Config.TIME_BASE - this.totalTime * Config.TIME_PER_SEC;
+    if (this.totalTime > Config.TIME_OVERTIME) {
+      const overtime = this.totalTime - Config.TIME_OVERTIME;
+      score -= Math.floor(overtime / 10) * Config.TIME_OVERTIME_PENALTY;
+    }
+    this.timeScore = Math.max(0, Math.round(score));
+  }
+
+  // 轨道设计分数（铺路锁定后计算一次）
+  calculateDesignScore(track, map) {
+    if (this.designCalculated) return this.designScore;
+    let score = 0;
+    // 途经加分点（驾驶阶段收集，初始为 0，驾驶中累加）
+    // 这里先计算静态部分
+    // 悬空路段
+    score += track.airLength() * Config.DESIGN_AIR_PER_PX;
+    // 高低落差复杂度
+    score += track.heightVariance() * Config.DESIGN_VARIANCE_FACTOR;
+    // 特技路段
+    score += track.stuntSegmentCount() * Config.DESIGN_STUNT_SEG;
+    // 平直单调惩罚
+    if (track.heightVariance() < 5000) {
+      score -= Config.DESIGN_MONOTONY_PENALTY;
+    }
+    // 绕路冗余惩罚
+    const refLen = Config.WORLD_W * 0.9;
+    if (track.totalLength() > refLen * 1.5) {
+      score -= Config.DESIGN_REDUNDANCY_PENALTY;
+    }
+    // 近道奖励
+    if (track.totalLength() < refLen * 0.85) {
+      score += Config.SHORTCUT_BONUS;
+    }
+    this.designScore = Math.round(score);
+    this.designCalculated = true;
+    return this.designScore;
+  }
+
+  // 驾驶中收集加分点
+  collectBonus(bonus, track) {
+    track.bonusCollected.add(bonus);
+    this.designScore += Config.DESIGN_BONUS_POINT;
+    this.lastStuntEvent = `+${Config.DESIGN_BONUS_POINT} 加分点`;
+    this.lastStuntEventTime = 1.5;
+  }
+
+  // 累加特技分数
+  addStunt(amount, label) {
+    this.stuntScore += Math.round(amount);
+    if (label && amount > 0) {
+      this.lastStuntEvent = `+${Math.round(amount)} ${label}`;
+      this.lastStuntEventTime = 1.5;
+      Registry.emit('bonus');
+    }
+    if (amount < 0) {
+      this.lastStuntEvent = `${Math.round(amount)} ${label}`;
+      this.lastStuntEventTime = 1.5;
+    }
+  }
+
+  // 更新事件显示计时
+  update(dt) {
+    if (this.lastStuntEventTime > 0) {
+      this.lastStuntEventTime -= dt;
+      if (this.lastStuntEventTime <= 0) this.lastStuntEvent = null;
+    }
+  }
+
+  total() {
+    return this.timeScore + this.designScore + this.stuntScore;
+  }
+
+  // 评级
+  grade() {
+    const t = this.total();
+    if (t >= 1500) return 'S';
+    if (t >= 1200) return 'A';
+    if (t >= 900) return 'B';
+    if (t >= 600) return 'C';
+    return 'D';
+  }
+}
+
+/* ============ 11. 输入管理 InputManager ============ */
+const InputManager = {
+  mouse: { x: 0, y: 0, down: false },
+  keys: { w: false, s: false },
+  forward: false,
+  backward: false,
+
+  init(canvas) {
+    this.canvas = canvas;
+
+    canvas.addEventListener('mousedown', (e) => this._onDown(e));
+    canvas.addEventListener('mousemove', (e) => this._onMove(e));
+    window.addEventListener('mouseup', (e) => this._onUp(e));
+
+    // 触屏支持（预留）
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      this._onDown({ clientX: t.clientX, clientY: t.clientY });
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      this._onMove({ clientX: t.clientX, clientY: t.clientY });
+    }, { passive: false });
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this._onUp(e);
+    }, { passive: false });
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') { this.keys.w = true; this.forward = true; }
+      if (k === 's' || k === 'arrowdown') { this.keys.s = true; this.backward = true; }
+    });
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'w' || k === 'arrowup') { this.keys.w = false; this.forward = false; }
+      if (k === 's' || k === 'arrowdown') { this.keys.s = false; this.backward = false; }
+    });
+  },
+
+  _getWorldPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    // 转换到世界坐标（由 Renderer 提供逆变换）
+    return Renderer.screenToWorld(sx, sy);
+  },
+
+  _onDown(e) {
+    if (Game.phase !== Phase.BUILD) return;
+    this.mouse.down = true;
+    const p = this._getWorldPos(e);
+    this.mouse.x = p.x; this.mouse.y = p.y;
+    Game.onDrawStart(p);
+  },
+  _onMove(e) {
+    const p = this._getWorldPos(e);
+    this.mouse.x = p.x; this.mouse.y = p.y;
+    if (this.mouse.down && Game.phase === Phase.BUILD) {
+      Game.onDrawMove(p);
+    }
+  },
+  _onUp(e) {
+    if (this.mouse.down) {
+      this.mouse.down = false;
+      Game.onDrawEnd();
+    }
+  }
+};
+
+/* ============ 12. 渲染器 Renderer ============ */
+const Renderer = {
+  canvas: null,
+  ctx: null,
+  width: 0,
+  height: 0,
+  camera: { x: 0, y: 0, zoom: 1 },
+  stars: [],     // 背景星空
+  particles: [], // 装饰粒子
+
+  init(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this._initStars();
+  },
+
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.width = window.innerWidth;
+    this.height = window.innerHeight;
+    this.canvas.width = this.width * dpr;
+    this.canvas.height = this.height * dpr;
+    this.canvas.style.width = this.width + 'px';
+    this.canvas.style.height = this.height + 'px';
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  },
+
+  _initStars() {
+    this.stars = [];
+    for (let i = 0; i < 120; i++) {
+      this.stars.push({
+        x: Math.random() * Config.WORLD_W,
+        y: Math.random() * Config.WORLD_H,
+        r: Math.random() * 1.5 + 0.3,
+        twinkle: Math.random() * Math.PI * 2,
+        speed: Math.random() * 0.5 + 0.2
+      });
+    }
+  },
+
+  // 屏幕坐标 → 世界坐标
+  screenToWorld(sx, sy) {
+    return {
+      x: (sx - this.width / 2) / this.camera.zoom + this.camera.x,
+      y: (sy - this.height / 2) / this.camera.zoom + this.camera.y
+    };
+  },
+
+  // 设置镜头（铺路阶段：全图；驾驶阶段：跟随车辆）
+  setCamera(x, y, zoom) {
+    this.camera.x = x;
+    this.camera.y = y;
+    this.camera.zoom = zoom;
+  },
+
+  // 平滑跟随
+  follow(targetX, targetY, zoom) {
+    this.camera.x = Utils.lerp(this.camera.x, targetX, Config.CAMERA_LERP);
+    this.camera.y = Utils.lerp(this.camera.y, targetY, Config.CAMERA_LERP);
+    this.camera.zoom = Utils.lerp(this.camera.zoom, zoom, Config.CAMERA_LERP);
+  },
+
+  // 适配全图
+  fitWorld() {
+    const zx = this.width / Config.WORLD_W;
+    const zy = this.height / Config.WORLD_H;
+    const zoom = Math.min(zx, zy) * 0.95;
+    this.camera.zoom = zoom;
+    this.camera.x = Config.WORLD_W / 2;
+    this.camera.y = Config.WORLD_H / 2;
+  },
+
+  // 应用镜头变换
+  _applyCamera() {
+    const ctx = this.ctx;
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(this.camera.zoom, this.camera.zoom);
+    ctx.translate(-this.camera.x, -this.camera.y);
+  },
+
+  // 主渲染入口
+  render(game) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = Config.COLOR.bg;
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
+
+    ctx.save();
+    this._applyCamera();
+
+    this._drawStars(game);
+    this._drawGrid();
+    // 仅在地图生成后绘制场景元素
+    if (game.map) {
+      this._drawTraps(game.map.traps, game.time);
+      this._drawBonuses(game.map.bonuses, game.time);
+      this._drawStartEnd(game.map.start, game.map.end, game.time);
+    }
+    if (game.track) this._drawTrack(game.track, game.time);
+
+    if (game.phase === Phase.BUILD) {
+      this._drawBuildCursor();
+    }
+
+    if ((game.phase === Phase.DRIVE || game.phase === Phase.END) && game.car) {
+      this._drawCar(game.car);
+    }
+
+    ctx.restore();
+
+    // HUD 浮层（屏幕坐标）
+    if (game.score) this._drawStuntEvent(game.score);
+    if (game.car && game.car.crashed) {
+      this._drawCrashOverlay();
+    }
+  },
+
+  _drawStars(game) {
+    const ctx = this.ctx;
+    ctx.save();
+    for (const s of this.stars) {
+      const alpha = 0.4 + Math.sin(game.time * s.speed + s.twinkle) * 0.3;
+      ctx.fillStyle = `rgba(232, 236, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+
+  _drawGrid() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = Config.COLOR.grid;
+    ctx.lineWidth = 1 / this.camera.zoom;
+    const step = 100;
+    // 仅绘制视口内
+    const left = this.camera.x - this.width / (2 * this.camera.zoom);
+    const right = this.camera.x + this.width / (2 * this.camera.zoom);
+    const top = this.camera.y - this.height / (2 * this.camera.zoom);
+    const bottom = this.camera.y + this.height / (2 * this.camera.zoom);
+    ctx.beginPath();
+    for (let x = Math.floor(left / step) * step; x < right; x += step) {
+      ctx.moveTo(x, top); ctx.lineTo(x, bottom);
+    }
+    for (let y = Math.floor(top / step) * step; y < bottom; y += step) {
+      ctx.moveTo(left, y); ctx.lineTo(right, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  _drawTraps(traps, time) {
+    const ctx = this.ctx;
+    for (const t of traps) {
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.rotate(t.rot + time * 0.3);
+
+      // 外发光
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, t.r * 1.6);
+      grad.addColorStop(0, 'rgba(255, 46, 99, 0.5)');
+      grad.addColorStop(1, 'rgba(255, 46, 99, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, t.r * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 主体：尖刺/坑/墙
+      ctx.fillStyle = Config.COLOR.trap;
+      ctx.strokeStyle = '#ff6b8a';
+      ctx.lineWidth = 2;
+      if (t.type === 'spike') {
+        // 尖刺
+        const spikes = 8;
+        ctx.beginPath();
+        for (let i = 0; i < spikes; i++) {
+          const a1 = (i / spikes) * Math.PI * 2;
+          const a2 = ((i + 0.5) / spikes) * Math.PI * 2;
+          ctx.lineTo(Math.cos(a1) * t.r, Math.sin(a1) * t.r);
+          ctx.lineTo(Math.cos(a2) * t.r * 0.4, Math.sin(a2) * t.r * 0.4);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (t.type === 'pit') {
+        // 坑（圆环）
+        ctx.beginPath();
+        ctx.arc(0, 0, t.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, t.r * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#0a0e27';
+        ctx.fill();
+      } else {
+        // 墙
+        ctx.fillRect(-t.r, -t.r * 0.3, t.r * 2, t.r * 0.6);
+        ctx.strokeRect(-t.r, -t.r * 0.3, t.r * 2, t.r * 0.6);
+      }
+      ctx.restore();
+    }
+  },
+
+  _drawBonuses(bonuses, time) {
+    const ctx = this.ctx;
+    for (const b of bonuses) {
+      if (b.collected) continue;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      const pulse = 1 + Math.sin(time * 3 + b.pulse) * 0.15;
+      ctx.scale(pulse, pulse);
+
+      // 外发光
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, b.r * 2);
+      grad.addColorStop(0, 'rgba(255, 210, 63, 0.6)');
+      grad.addColorStop(1, 'rgba(255, 210, 63, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, b.r * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 主体：星标
+      ctx.fillStyle = Config.COLOR.bonus;
+      ctx.strokeStyle = '#fff5b8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const points = 5;
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? b.r : b.r * 0.45;
+        const a = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+        if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 类型字母
+      ctx.fillStyle = '#0a0e27';
+      ctx.font = 'bold 14px Orbitron';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const letter = { float: 'F', ramp: 'R', shortcut: 'S', stunt: 'T' }[b.type] || '?';
+      ctx.fillText(letter, 0, 1);
+
+      ctx.restore();
+    }
+  },
+
+  _drawStartEnd(start, end, time) {
+    const ctx = this.ctx;
+    // 起点：绿色旗
+    ctx.save();
+    ctx.translate(start.x, start.y);
+    const pulse1 = 1 + Math.sin(time * 2) * 0.1;
+    ctx.fillStyle = 'rgba(0, 255, 198, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, 0, Config.START_END_RADIUS * pulse1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = Config.COLOR.start;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, Config.START_END_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = Config.COLOR.start;
+    ctx.font = 'bold 16px Orbitron';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('START', 0, 0);
+    ctx.restore();
+
+    // 终点：红白格子旗
+    ctx.save();
+    ctx.translate(end.x, end.y);
+    const pulse2 = 1 + Math.sin(time * 2 + 1) * 0.1;
+    ctx.fillStyle = 'rgba(255, 94, 58, 0.2)';
+    ctx.beginPath();
+    ctx.arc(0, 0, Config.START_END_RADIUS * pulse2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = Config.COLOR.end;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, Config.START_END_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    // 格子图案
+    ctx.fillStyle = '#fff';
+    const sz = 8;
+    for (let i = -2; i < 2; i++) {
+      for (let j = -1; j < 1; j++) {
+        if ((i + j) % 2 === 0) ctx.fillStyle = '#fff';
+        else ctx.fillStyle = '#0a0e27';
+        ctx.fillRect(i * sz, j * sz, sz, sz);
+      }
+    }
+    ctx.fillStyle = Config.COLOR.end;
+    ctx.font = 'bold 14px Orbitron';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('FINISH', 0, 20);
+    ctx.restore();
+  },
+
+  _drawTrack(track, time) {
+    if (track.points.length < 2) return;
+    const ctx = this.ctx;
+
+    // 外发光层
+    ctx.save();
+    ctx.strokeStyle = Config.COLOR.trackGlow;
+    ctx.lineWidth = Config.TRACK_WIDTH + 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = Config.COLOR.track;
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.moveTo(track.points[0].x, track.points[0].y);
+    for (let i = 1; i < track.points.length; i++) {
+      ctx.lineTo(track.points[i].x, track.points[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 主轨道
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // 分段绘制以区分悬空段
+    for (let i = 0; i < track.points.length - 1; i++) {
+      const a = track.points[i], b = track.points[i + 1];
+      const isAir = a.isAir || b.isAir;
+      ctx.strokeStyle = isAir ? Config.COLOR.trackAir : Config.COLOR.track;
+      ctx.lineWidth = Config.TRACK_WIDTH;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 悬空段虚线点缀
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 8]);
+    for (let i = 0; i < track.points.length - 1; i++) {
+      const a = track.points[i], b = track.points[i + 1];
+      if (a.isAir || b.isAir) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  },
+
+  _drawBuildCursor() {
+    const ctx = this.ctx;
+    const p = InputManager.mouse;
+    ctx.save();
+    ctx.strokeStyle = Config.COLOR.track;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(p.x - 18, p.y);
+    ctx.lineTo(p.x - 6, p.y);
+    ctx.moveTo(p.x + 6, p.y);
+    ctx.lineTo(p.x + 18, p.y);
+    ctx.moveTo(p.x, p.y - 18);
+    ctx.lineTo(p.x, p.y - 6);
+    ctx.moveTo(p.x, p.y + 6);
+    ctx.lineTo(p.x, p.y + 18);
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  _drawCar(car) {
+    const ctx = this.ctx;
+
+    // 拖尾
+    ctx.save();
+    for (const t of car.trail) {
+      const alpha = t.life / 0.5 * 0.3;
+      ctx.fillStyle = `rgba(0, 255, 198, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.angle);
+
+    // 影子（地面时）
+    if (!car.airborne) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(0, 18, 30, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 车身
+    ctx.fillStyle = Config.COLOR.car;
+    ctx.strokeStyle = '#0a0e27';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-25, 0);
+    ctx.lineTo(-20, -12);
+    ctx.lineTo(5, -14);
+    ctx.lineTo(20, -8);
+    ctx.lineTo(25, 0);
+    ctx.lineTo(20, 8);
+    ctx.lineTo(-20, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 车窗
+    ctx.fillStyle = 'rgba(10, 14, 39, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(-12, -10);
+    ctx.lineTo(0, -12);
+    ctx.lineTo(10, -7);
+    ctx.lineTo(10, -2);
+    ctx.lineTo(-12, -2);
+    ctx.closePath();
+    ctx.fill();
+
+    // 车轮
+    ctx.fillStyle = Config.COLOR.carWheel;
+    ctx.strokeStyle = '#0a0e27';
+    ctx.lineWidth = 2;
+    this._drawWheel(ctx, -15, 10, 8, car.wheelRotation);
+    this._drawWheel(ctx, 15, 10, 8, car.wheelRotation);
+
+    // 翻车提示
+    if (car.crashed) {
+      ctx.save();
+      ctx.rotate(-car.angle); // 反向旋转保持文字水平
+      ctx.fillStyle = '#ff2e63';
+      ctx.font = 'bold 18px Orbitron';
+      ctx.textAlign = 'center';
+      ctx.fillText('CRASH!', 0, -30);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  },
+
+  _drawWheel(ctx, x, y, r, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 轮辐
+    ctx.beginPath();
+    ctx.moveTo(-r, 0); ctx.lineTo(r, 0);
+    ctx.moveTo(0, -r); ctx.lineTo(0, r);
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  _drawStuntEvent(score) {
+    if (!score.lastStuntEvent) return;
+    const ctx = this.ctx;
+    const alpha = Math.min(1, score.lastStuntEventTime / 1.5);
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 255, 198, ${alpha})`;
+    ctx.font = 'bold 22px Orbitron';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0, 255, 198, 0.8)';
+    ctx.shadowBlur = 15;
+    ctx.fillText(score.lastStuntEvent, this.width / 2, 140);
+    ctx.restore();
+  },
+
+  _drawCrashOverlay() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 46, 99, 0.08)';
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
+  }
+};
+
+/* ============ 13. 阶段管理 PhaseManager ============ */
+const PhaseManager = {
+  current: Phase.START,
+  listeners: {},
+
+  set(phase) {
+    const old = this.current;
+    this.current = phase;
+    if (this.listeners[phase]) {
+      this.listeners[phase].forEach(fn => fn(old, phase));
+    }
+  },
+
+  on(phase, fn) {
+    if (!this.listeners[phase]) this.listeners[phase] = [];
+    this.listeners[phase].push(fn);
+  }
+};
+
+/* ============ 14. 游戏主控 Game ============ */
+const Game = {
+  phase: Phase.START,
+  map: null,
+  track: null,
+  car: null,
+  score: null,
+  time: 0,
+  lastTime: 0,
+  running: false,
+  drawingActive: false,
+
+  init() {
+    const canvas = document.getElementById('gameCanvas');
+    Renderer.init(canvas);
+    InputManager.init(canvas);
+
+    // UI 事件
+    document.getElementById('btnStart').addEventListener('click', () => this.startGame());
+    document.getElementById('btnRestart').addEventListener('click', () => this.startGame());
+    document.getElementById('btnUndo').addEventListener('click', () => this.undoTrack());
+    document.getElementById('btnClear').addEventListener('click', () => this.clearTrack());
+    document.getElementById('btnConfirm').addEventListener('click', () => this.confirmTrack());
+
+    // 阶段监听
+    PhaseManager.on(Phase.BUILD, () => this._enterBuild());
+    PhaseManager.on(Phase.DRIVE, () => this._enterDrive());
+    PhaseManager.on(Phase.END, () => this._enterEnd());
+
+    this.running = true;
+    this.lastTime = performance.now();
+    requestAnimationFrame((t) => this.loop(t));
+  },
+
+  loop(now) {
+    if (!this.running) return;
+    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+    this.lastTime = now;
+    this.time += dt;
+
+    this.update(dt);
+    Renderer.render(this);
+
+    requestAnimationFrame((t) => this.loop(t));
+  },
+
+  update(dt) {
+    if (this.phase === Phase.BUILD) {
+      // 铺路阶段：保持全图镜头
+      Renderer.fitWorld();
+    } else if (this.phase === Phase.DRIVE) {
+      // 驾驶阶段：跟随车辆
+      this.car.update(this.track, InputManager, dt, this.score);
+      this.score.updateTime(dt);
+      this.score.update(dt);
+
+      // 检测加分点收集
+      const bonus = Collision.pointInBonus(this.car, this.map.bonuses);
+      if (bonus) {
+        this.score.collectBonus(bonus, this.track);
+        bonus.collected = true;
+      }
+
+      // 镜头跟随
+      Renderer.follow(this.car.x, this.car.y - 80, Config.CAMERA_ZOOM_DRIVE);
+
+      // 终点检测
+      if (Utils.dist(this.car, this.map.end) < Config.START_END_RADIUS * 0.8) {
+        PhaseManager.set(Phase.END);
+      }
+    } else if (this.phase === Phase.END) {
+      // 结算阶段：保持镜头
+      if (this.car) {
+        Renderer.follow(this.car.x, this.car.y - 80, Config.CAMERA_ZOOM_DRIVE);
+      }
+    }
+
+    // 更新 HUD
+    this._updateHUD();
+  },
+
+  startGame() {
+    // 隐藏开始/结算页
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('resultScreen').classList.remove('show');
+    document.getElementById('hudTop').classList.remove('hidden');
+    document.getElementById('hintPanel').classList.remove('hidden');
+    document.getElementById('controlPanel').classList.remove('hidden');
+    document.getElementById('timerDisplay').classList.add('hidden');
+
+    // 初始化数据
+    this.map = MapGenerator.generate();
+    this.track = new TrackBuilder();
+    this.car = new CarController();
+    this.score = new ScoreSystem();
+    this.time = 0;
+
+    PhaseManager.set(Phase.BUILD);
+  },
+
+  _enterBuild() {
+    this.phase = Phase.BUILD;
+    document.getElementById('phaseLabel').textContent = PhaseNames[Phase.BUILD];
+    document.getElementById('controlPanel').classList.remove('hidden');
+    document.getElementById('hintTitle').textContent = '铺路阶段';
+    document.getElementById('hintContent').innerHTML =
+      '按住<strong>鼠标左键</strong>从绿色 <span class="key">START</span> 附近开始绘制轨道，' +
+      '延伸至红色 <span class="key">FINISH</span>。<br>' +
+      '避开<span style="color:#ff2e63">陷阱</span>，途经<span style="color:#ffd23f">金色加分点</span>可加分。<br>' +
+      '紫色段为悬空路段，可设计特技。完成后点击 <span class="key">确认铺路</span>。';
+    this._showToast('开始铺设你的轨道！', 'success');
+  },
+
+  _enterDrive() {
+    this.phase = Phase.DRIVE;
+    document.getElementById('phaseLabel').textContent = PhaseNames[Phase.DRIVE];
+    document.getElementById('controlPanel').classList.add('hidden');
+    document.getElementById('hintTitle').textContent = '驾驶阶段';
+    document.getElementById('hintContent').innerHTML =
+      '长按 <span class="key">W</span> 前进加速（车头会翘起）<br>' +
+      '长按 <span class="key">S</span> 后退刹车（车尾会翘起）<br>' +
+      '<strong>翘头过度会翻车</strong>，自动复位但扣分。<br>' +
+      '腾空、平稳落地、坡道特技均加分。';
+    document.getElementById('timerDisplay').classList.remove('hidden');
+    this._showToast('开车！冲向终点！', 'success');
+
+    // 初始化车辆到起点
+    const startPoint = this.track.getTrackPointAt(this.map.start.x);
+    this.car.reset(this.map.start, startPoint ? startPoint.slope : 0);
+    this.car.x = this.map.start.x;
+    this.car.y = startPoint ? startPoint.y : this.map.start.y;
+    this.car.angle = startPoint ? startPoint.slope : 0;
+
+    // 计算轨道设计分数（静态部分）
+    this.score.calculateDesignScore(this.track, this.map);
+  },
+
+  _enterEnd() {
+    this.phase = Phase.END;
+    document.getElementById('phaseLabel').textContent = PhaseNames[Phase.END];
+    // 显示结算面板
+    setTimeout(() => {
+      document.getElementById('resultTime').textContent = this.score.timeScore;
+      document.getElementById('resultDesign').textContent = this.score.designScore;
+      document.getElementById('resultStunt').textContent = this.score.stuntScore;
+      document.getElementById('resultTotal').textContent = this.score.total();
+      document.getElementById('resultGrade').textContent = this.score.grade();
+      document.getElementById('resultScreen').classList.add('show');
+    }, 600);
+  },
+
+  // 铺路阶段：鼠标按下开始绘制
+  onDrawStart(p) {
+    if (this.phase !== Phase.BUILD || this.track.locked) return;
+    this.drawingActive = true;
+    // 如果是首个点，必须从起点附近开始
+    if (this.track.points.length === 0) {
+      if (Utils.dist(p, this.map.start) > Config.START_END_RADIUS) {
+        this._showToast('请从绿色起点附近开始绘制！');
+        this.drawingActive = false;
+        return;
+      }
+    }
+    const r = this.track.tryAddPoint(p, this.map);
+    if (!r.ok && r.error !== 'too_close') {
+      this._showToast(r.error);
+      this.drawingActive = false;
+    }
+  },
+
+  onDrawMove(p) {
+    if (!this.drawingActive || this.phase !== Phase.BUILD) return;
+    const r = this.track.tryAddPoint(p, this.map);
+    if (!r.ok && r.error !== 'too_close') {
+      this._showToast(r.error);
+      // 不停止绘制，跳过该点
+    }
+  },
+
+  onDrawEnd() {
+    this.drawingActive = false;
+  },
+
+  undoTrack() {
+    if (this.phase !== Phase.BUILD) return;
+    this.track.undo();
+  },
+
+  clearTrack() {
+    if (this.phase !== Phase.BUILD) return;
+    this.track.clear();
+    this._showToast('已清空轨道', 'success');
+  },
+
+  confirmTrack() {
+    if (this.phase !== Phase.BUILD) return;
+    const v = this.track.validate(this.map);
+    if (!v.ok) {
+      this._showToast(v.error);
+      return;
+    }
+    const lockResult = this.track.lock(this.map);
+    if (!lockResult.ok) {
+      this._showToast(lockResult.error);
+      return;
+    }
+    this._showToast('轨道已锁定！进入驾驶阶段', 'success');
+    PhaseManager.set(Phase.DRIVE);
+  },
+
+  _showToast(msg, type = '') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast show ' + type;
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2200);
+  },
+
+  _updateHUD() {
+    if (!this.score) return;
+    document.getElementById('scoreTime').textContent = this.score.timeScore;
+    document.getElementById('scoreDesign').textContent = this.score.designScore;
+    document.getElementById('scoreStunt').textContent = this.score.stuntScore;
+    if (this.phase === Phase.DRIVE || this.phase === Phase.END) {
+      document.getElementById('timerValue').textContent = this.score.totalTime.toFixed(2);
+    }
+    // 翻车震动
+    if (this.car && this.car.crashed) {
+      document.body.classList.add('shaking');
+    } else {
+      document.body.classList.remove('shaking');
+    }
+  }
+};
+
+/* ============ 15. 启动 ============ */
+window.addEventListener('load', () => {
+  Game.init();
+});
+
+/* ============ 拓展接口示例（注释，供后续启用） ============ */
+// Registry.registerTrap('lava', { color: '#ff4500', onHit: (car) => { ... } });
+// Registry.loadLevel({ start, end, traps, bonuses, parTime });
+// Registry.setCarSkin({ body: '#ff5e3a', wheel: '#00ffc6' });
+// Registry.on('flip', () => playSound('crash.mp3'));
+// Registry.on('bonus', () => playSound('coin.mp3'));
+</script>
+</body>
+</html>
