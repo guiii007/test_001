@@ -180,7 +180,7 @@
       <canvas id="game" width="600" height="720"></canvas>
     </div>
 
-    <div class="hint">点击「发射弹珠」投放一颗 · 点击「重置游戏」清空全部</div>
+    <div class="hint">画布拖动 = 瞄准发射（方向+力度） · 拖动发射器圆球 = 移动位置 · 按钮发射 = 垂直下落</div>
   </div>
 
 <script>
@@ -215,6 +215,18 @@ const CONFIG = {
   friction: 0.999,        // 空气阻尼（越接近 1 阻力越小）
   wallRestitution: 0.5,   // 撞墙弹性系数
   launchJitter: 1.6,      // 发射时水平随机扰动幅度（越大越偏）
+
+  // —— 发射器（愤怒的小鸟式拖动瞄准） ——
+  launcher: {
+    x: 300,         // 发射器初始 X 坐标（可拖动改变）
+    y: 60,          // 发射器初始 Y 坐标（可拖动改变）
+    r: 14,          // 发射器半径（用于点击判定与绘制）
+    maxDragY: 100,  // 发射器可移动的最高 Y 边界（不超过第一层钉子）
+  },
+  launchPower: 0.18,   // 拖动距离 → 初速度的转换系数（越大同样拖动力度越大）
+  maxPower: 16,        // 最大初速度上限（避免拖太远力度过大）
+  minDragDist: 6,      // 最小有效拖动距离（小于此值不发射，避免误触）
+  trajectorySteps: 24, // 瞄准时预测轨迹的点数（越大轨迹越长）
 
   // —— 得分槽 ——
   // 从左到右依次对应每个槽位的分值；中间低、两侧高（经典 Plinko）
@@ -353,18 +365,102 @@ function buildSlots() {
 
 /* ============================================================
  * ⑤ 发射弹珠
- *    在画布顶部中央生成一颗弹珠，赋予微小水平随机速度
+ *    方式一：拖动瞄准发射（愤怒的小鸟式）
+ *      - 在画布上按下并拖动 → 显示瞄准线与预测轨迹
+ *      - 释放时按"拖动向量的反方向"发射，距离决定力度
+ *    方式二：点击「发射弹珠」按钮 → 从发射器位置垂直下落（带随机扰动）
  * ============================================================ */
-function launchBall() {
+
+// 瞄准 / 拖动发射器状态
+let aiming = false;            // 是否正在瞄准
+let aimPos = null;             // 当前鼠标/手指位置
+let draggingLauncher = false;  // 是否正在拖动发射器（移动其位置）
+
+/* 从发射器位置按指定初速度发射一颗弹珠 */
+function launchBall(vx, vy) {
   balls.push({
-    x: W / 2 + (Math.random() - 0.5) * 6,  // 顶端投放点（带极小偏移）
-    y: 40,
-    vx: (Math.random() - 0.5) * CONFIG.launchJitter, // 水平随机扰动
-    vy: 0,
+    x: CONFIG.launcher.x,
+    y: CONFIG.launcher.y,
+    vx: vx,
+    vy: vy,
     r: CONFIG.ballRadius,
-    settled: false,   // 是否已落入槽位（结算后移除）
+    settled: false,
   });
 }
+
+/* 按钮发射：垂直下落 + 微小随机水平扰动（无需拖动时的快捷发射） */
+function launchBallFromButton() {
+  launchBall((Math.random() - 0.5) * CONFIG.launchJitter, 0);
+}
+
+/* 把鼠标/触摸事件坐标换算成画布内部坐标（处理 CSS 缩放） */
+function getCanvasPos(evt) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+  const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+/* 处理按下：判定是"拖动发射器"还是"瞄准发射" */
+function handleDown(evt) {
+  const pos = getCanvasPos(evt);
+  const dx = pos.x - CONFIG.launcher.x;
+  const dy = pos.y - CONFIG.launcher.y;
+  // 点在发射器圆圈内 → 进入拖动发射器模式
+  if (Math.hypot(dx, dy) < CONFIG.launcher.r + 8) {
+    draggingLauncher = true;
+  } else {
+    // 否则进入瞄准模式
+    aiming = true;
+    aimPos = pos;
+  }
+}
+
+/* 处理移动：更新发射器位置 或 更新瞄准点 */
+function handleMove(evt) {
+  const pos = getCanvasPos(evt);
+  if (draggingLauncher) {
+    // 限制发射器在画布顶部区域内（不能进入钉阵）
+    CONFIG.launcher.x = Math.max(20, Math.min(W - 20, pos.x));
+    CONFIG.launcher.y = Math.max(20, Math.min(CONFIG.launcher.maxDragY, pos.y));
+  } else if (aiming) {
+    aimPos = pos;
+  }
+}
+
+/* 处理释放：若是瞄准模式则发射弹珠 */
+function handleUp(evt) {
+  if (aiming && aimPos) {
+    // 发射向量 = 发射器位置 - 鼠标位置（弹弓反向拉伸效果）
+    const dx = CONFIG.launcher.x - aimPos.x;
+    const dy = CONFIG.launcher.y - aimPos.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > CONFIG.minDragDist) {
+      // 力度 = 拖动距离 × 系数，并限制最大值
+      const power = Math.min(dist * CONFIG.launchPower, CONFIG.maxPower);
+      const angle = Math.atan2(dy, dx);
+      launchBall(Math.cos(angle) * power, Math.sin(angle) * power);
+    }
+  }
+  aiming = false;
+  draggingLauncher = false;
+  aimPos = null;
+}
+
+// 鼠标事件
+canvas.addEventListener('mousedown', handleDown);
+canvas.addEventListener('mousemove', handleMove);
+canvas.addEventListener('mouseup', handleUp);
+canvas.addEventListener('mouseleave', handleUp);
+// 触摸事件（移动端）—— preventDefault 避免页面滚动
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleDown(e); }, { passive: false });
+canvas.addEventListener('touchmove',  (e) => { e.preventDefault(); handleMove(e); }, { passive: false });
+canvas.addEventListener('touchend',   (e) => { e.preventDefault(); handleUp(e); }, { passive: false });
 
 /* ============================================================
  * ⑥ 物理更新（每帧调用）
@@ -471,13 +567,11 @@ function render() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // —— 顶部投放口指示 ——
-  ctx.fillStyle = 'rgba(255,140,66,0.15)';
-  ctx.fillRect(W / 2 - 18, 0, 36, 30);
-  ctx.fillStyle = 'rgba(255,140,66,0.6)';
-  ctx.font = '11px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('DROP', W / 2, 20);
+  // —— 发射器（可拖动位置） ——
+  drawLauncher();
+
+  // —— 瞄准线与预测轨迹（拖动瞄准时显示） ——
+  if (aiming && aimPos) drawAimingGuide();
 
   // —— 底部得分槽 ——
   const slotTop = slotRects[0].topY;
@@ -571,6 +665,110 @@ function render() {
 }
 
 /* ============================================================
+ * ⑧-2 绘制发射器（弹弓底座 + 可拖动圆球）
+ * ============================================================ */
+function drawLauncher() {
+  const { x, y, r } = CONFIG.launcher;
+  // 底座阴影
+  ctx.beginPath();
+  ctx.ellipse(x, y + r + 4, r * 1.4, 4, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
+  // 弹弓 Y 形支架（两根斜杆）
+  ctx.strokeStyle = '#8a5a3b';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - r, y + r);
+  ctx.lineTo(x - r * 0.6, y - r * 0.4);
+  ctx.moveTo(x + r, y + r);
+  ctx.lineTo(x + r * 0.6, y - r * 0.4);
+  ctx.stroke();
+  // 待发射弹珠（渐变球）
+  const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+  grad.addColorStop(0, CONFIG.ballColor[0]);
+  grad.addColorStop(1, CONFIG.ballColor[1]);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  // 高光
+  ctx.beginPath();
+  ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fill();
+  // 拖动时高亮提示边框
+  if (draggingLauncher) {
+    ctx.beginPath();
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,209,102,0.8)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+/* ============================================================
+ * ⑧-3 绘制瞄准引导：拉伸线 + 力度指示 + 预测抛物线轨迹
+ * ============================================================ */
+function drawAimingGuide() {
+  const lx = CONFIG.launcher.x;
+  const ly = CONFIG.launcher.y;
+  const dx = lx - aimPos.x;
+  const dy = ly - aimPos.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < CONFIG.minDragDist) return;
+
+  // 计算发射初速度（与 handleUp 保持一致）
+  const power = Math.min(dist * CONFIG.launchPower, CONFIG.maxPower);
+  const angle = Math.atan2(dy, dx);
+  const vx = Math.cos(angle) * power;
+  const vy = Math.sin(angle) * power;
+
+  // —— 弹弓拉伸线（从发射器到鼠标位置，模拟橡皮筋） ——
+  ctx.strokeStyle = 'rgba(255,209,102,0.7)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(lx, ly);
+  ctx.lineTo(aimPos.x, aimPos.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // —— 鼠标位置标记圈 ——
+  ctx.beginPath();
+  ctx.arc(aimPos.x, aimPos.y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,209,102,0.5)';
+  ctx.fill();
+
+  // —— 预测抛物线轨迹（用相同物理模拟若干步，画虚线点） ——
+  let px = lx, py = ly, pvx = vx, pvy = vy;
+  ctx.fillStyle = 'rgba(255,140,66,0.6)';
+  for (let i = 0; i < CONFIG.trajectorySteps; i++) {
+    pvy += CONFIG.gravity;
+    pvx *= CONFIG.friction;
+    pvy *= CONFIG.friction;
+    px += pvx;
+    py += pvy;
+    if (py > H || px < 0 || px > W) break; // 出界则停止
+    // 越远的点越小越淡
+    const alpha = 0.6 * (1 - i / CONFIG.trajectorySteps);
+    const size = 3 * (1 - i / CONFIG.trajectorySteps * 0.5);
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // —— 力度指示文字 ——
+  const powerPct = Math.round((power / CONFIG.maxPower) * 100);
+  ctx.fillStyle = '#ffd166';
+  ctx.font = 'bold 12px "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`POWER ${powerPct}%`, aimPos.x + 10, aimPos.y - 10);
+}
+
+/* ============================================================
  * ⑨ 主循环
  * ============================================================ */
 function loop() {
@@ -596,7 +794,7 @@ function resetGame() {
 /* ============================================================
  * ⑪ 事件绑定与启动
  * ============================================================ */
-launchBtn.addEventListener('click', launchBall);
+launchBtn.addEventListener('click', launchBallFromButton);
 resetBtn.addEventListener('click', resetGame);
 
 // 切换钉阵布局：更新 CONFIG.layout → 重建钉阵 → 重置游戏
@@ -606,9 +804,9 @@ layoutSel.addEventListener('change', () => {
   buildPegs();
 });
 
-// 空格键也可发射，提升手感
+// 空格键也可发射（按钮式垂直下落），R 键重置
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') { e.preventDefault(); launchBall(); }
+  if (e.code === 'Space') { e.preventDefault(); launchBallFromButton(); }
   if (e.code === 'KeyR') { resetGame(); }
 });
 
