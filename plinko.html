@@ -259,6 +259,8 @@ function buildSlots() {
       w: slotW,
       score: CONFIG.slots[i],
       topY: slotTopY,
+      subtotal: 0,   // 该槽累计得分（每命中一颗弹珠累加）
+      hits: 0,       // 该槽命中弹珠数
     });
   }
 }
@@ -340,7 +342,11 @@ function updatePhysics() {
       // 根据弹珠中心 x 判定落入哪个槽
       const idx = Math.min(slotRects.length - 1,
                            Math.max(0, Math.floor(b.x / (W / slotRects.length))));
-      addScore(slotRects[idx].score);
+      const slot = slotRects[idx];
+      addScore(slot.score);
+      // 同时累加该槽的小计分与命中数
+      slot.subtotal += slot.score;
+      slot.hits += 1;
       b.settled = true;
       // 从列表中移除该弹珠
       balls.splice(i, 1);
@@ -414,6 +420,24 @@ function render() {
     ctx.font = 'bold 14px "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(s.score, s.x + s.w / 2, slotTop + 28);
+
+    // —— 该槽累计小计分显示区（位于分值文字下方） ——
+    // 半透明小卡片背景
+    const cardY = slotTop + 40;
+    const cardH = 34;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(s.x + 4, cardY, s.w - 8, cardH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(s.x + 4, cardY, s.w - 8, cardH);
+    // "SUB" 标签
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.fillText('SUB', s.x + s.w / 2, cardY + 12);
+    // 小计分数字（命中后高亮）
+    ctx.fillStyle = s.hits > 0 ? '#ffd166' : 'rgba(255,255,255,0.45)';
+    ctx.font = 'bold 14px "Courier New", monospace';
+    ctx.fillText(s.subtotal, s.x + s.w / 2, cardY + 28);
   }
   // 最右侧分隔线
   ctx.beginPath();
@@ -476,6 +500,11 @@ function resetGame() {
   balls = [];
   totalScore = 0;
   scoreEl.textContent = '0';
+  // 同时清零每个槽的小计分与命中数
+  for (const s of slotRects) {
+    s.subtotal = 0;
+    s.hits = 0;
+  }
 }
 
 /* ============================================================
