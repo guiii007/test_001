@@ -91,18 +91,50 @@
   }
   .btn-reset:hover { opacity: 1; }
 
-  /* 挡板开关按钮：关闭=灰，开启=青绿高亮 */
-  .btn-toggle {
+  /* 挡板开关：紧凑复选框样式，不占额外按钮宽度 */
+  .rail-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    border-radius: 8px;
     background: var(--panel);
     border: 1px solid var(--border);
-    transition: background .2s ease, border-color .2s ease;
+    transition: background .2s ease;
   }
-  .btn-toggle.on {
+  .rail-toggle:hover { background: rgba(255,255,255,0.1); }
+  .rail-toggle input {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--muted);
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    transition: background .15s ease, border-color .15s ease;
+    margin: 0;
+  }
+  .rail-toggle input:checked {
     background: #2dd4bf;
     border-color: #14b8a6;
-    color: #0f1424;
   }
-  .btn-toggle:hover { transform: translateY(-1px); }
+  .rail-toggle input:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 0px;
+    width: 5px;
+    height: 10px;
+    border: solid #0f1424;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
 
   /* 布局选择下拉框（复用 btn 外观） */
   .layout-sel {
@@ -179,8 +211,11 @@
         <option value="diamond">菱形</option>
         <option value="hexagon">蜂巢</option>
       </select>
-      <!-- 外围挡板开关：点击切换开/关，开启后防止弹珠飞出钉阵 -->
-      <button class="btn btn-toggle" id="railBtn" title="点击开/关外围挡板">挡板：关</button>
+      <!-- 外围挡板开关：紧凑复选框样式，不占额外按钮宽度 -->
+      <label class="rail-toggle" title="开/关外围挡板">
+        <input type="checkbox" id="railChk" />
+        <span>挡板</span>
+      </label>
       <button class="btn btn-reset" id="resetBtn">重置游戏</button>
       <button class="btn btn-launch" id="launchBtn">发射弹珠</button>
       <!-- 实时分数卡片（作为 topbar 最后一项） -->
@@ -271,13 +306,15 @@ let balls = [];     // 当前下落中的弹珠列表
 let pegs = [];      // 钉子列表 {x, y, r}
 let totalScore = 0; // 总得分
 let slotRects = []; // 底部得分槽矩形 {x, w, score}
-let pegBounds = { minX: 0, maxX: W, topY: 0, bottomY: 0 }; // 钉阵边界（供挡板使用）
+let hullPath = []; // 钉阵外圈顶点序列（顺时针，用于挡板绘制与碰撞）
+let pegBounds = { minX: 0, maxX: W, topY: 0, bottomY: 0 }; // 钉阵包围盒（保留备用）
 
 // DOM 元素引用
 const scoreEl = document.getElementById('scoreVal');
 const launchBtn = document.getElementById('launchBtn');
 const resetBtn = document.getElementById('resetBtn');
 const layoutSel = document.getElementById('layoutSel'); // 布局选择下拉框
+const railChk = document.getElementById('railChk');   // 挡板开关复选框
 
 /* ============================================================
  * ③ 构建钉阵（根据 CONFIG.layout 分发到不同布局）
@@ -293,7 +330,7 @@ function buildPegs() {
     case 'triangle':
     default:        buildTrianglePegs(); break;
   }
-  // 计算钉阵边界（用于挡板定位），无钉子时给默认值
+  // 计算钉阵外圈顶点序列（用于挡板）+ 包围盒
   if (pegs.length > 0) {
     let minX = Infinity, maxX = -Infinity, topY = Infinity, bottomY = -Infinity;
     for (const p of pegs) {
@@ -303,9 +340,35 @@ function buildPegs() {
       if (p.y + p.r > bottomY) bottomY = p.y + p.r;
     }
     pegBounds = { minX, maxX, topY, bottomY };
+    // 用凸包算法求外圈顶点序列（Andrew 单调链）
+    hullPath = convexHull(pegs.map(p => ({ x: p.x, y: p.y })));
   } else {
     pegBounds = { minX: 0, maxX: W, topY: 0, bottomY: 0 };
+    hullPath = [];
   }
+}
+
+/* Andrew 单调链凸包算法：输入点集，返回顺时针外圈顶点序列 */
+function convexHull(points) {
+  const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const n = pts.length;
+  if (n < 2) return pts.slice();
+  const cross = (O, A, B) => (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+  // 下半包
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  // 上半包
+  const upper = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop(); upper.pop();
+  return lower.concat(upper); // 顺时针闭合路径
 }
 
 /* —— 三角形：每层钉数递增，整体居中（经典 Plinko） —— */
@@ -498,6 +561,58 @@ canvas.addEventListener('touchmove',  (e) => { e.preventDefault(); handleMove(e)
 canvas.addEventListener('touchend',   (e) => { e.preventDefault(); handleUp(e); }, { passive: false });
 
 /* ============================================================
+ * ⑤-2 圆 vs 线段碰撞（用于挡板：弹珠沿外圈连线反弹）
+ *    A-C 为线段两端点，b 为弹珠，e 为弹性系数
+ *    求弹珠圆心到线段的最近点 P，若距离 < 半径则沿法线反弹
+ * ============================================================ */
+function collideBallSegment(b, A, C, e) {
+  const abx = b.x - A.x;
+  const aby = b.y - A.y;
+  const acx = C.x - A.x;
+  const acy = C.y - A.y;
+  const segLen2 = acx * acx + acy * acy;
+  // 线段长度为 0 时退化为点-圆碰撞
+  if (segLen2 < 1e-6) {
+    const d = Math.hypot(abx, aby);
+    if (d < b.r && d > 0) {
+      const nx = abx / d, ny = aby / d;
+      b.x = A.x + nx * b.r;
+      b.y = A.y + ny * b.r;
+      const vDotN = b.vx * nx + b.vy * ny;
+      if (vDotN < 0) {
+        b.vx -= (1 + e) * vDotN * nx;
+        b.vy -= (1 + e) * vDotN * ny;
+      }
+    }
+    return;
+  }
+  // 弹珠圆心在线段上的投影参数 t ∈ [0,1]
+  let t = (abx * acx + aby * acy) / segLen2;
+  t = Math.max(0, Math.min(1, t));
+  // 最近点 P
+  const px = A.x + acx * t;
+  const py = A.y + acy * t;
+  const dx = b.x - px;
+  const dy = b.y - py;
+  const dist = Math.hypot(dx, dy);
+  if (dist < b.r && dist > 0) {
+    // 法线（从线段指向弹珠）
+    const nx = dx / dist;
+    const ny = dy / dist;
+    // 把弹珠推到挡板表面之外
+    const overlap = b.r - dist;
+    b.x += nx * overlap;
+    b.y += ny * overlap;
+    // 仅当朝挡板运动时反射
+    const vDotN = b.vx * nx + b.vy * ny;
+    if (vDotN < 0) {
+      b.vx -= (1 + e) * vDotN * nx;
+      b.vy -= (1 + e) * vDotN * ny;
+    }
+  }
+}
+
+/* ============================================================
  * ⑥ 物理更新（每帧调用）
  *    - 施加重力
  *    - 与每个钉子做圆-圆碰撞检测与反射
@@ -527,22 +642,22 @@ function updatePhysics() {
       b.vx = -b.vx * CONFIG.wallRestitution;
     }
 
-    // —— 外围挡板碰撞（开启时生效，仅左右两侧，底部开放） ——
-    // 挡板从钉阵顶部延伸到底部得分槽线，把弹珠约束在钉阵内
-    if (CONFIG.guardRails) {
-      const railL = pegBounds.minX - CONFIG.guardRailPad; // 左挡板 X
-      const railR = pegBounds.maxX + CONFIG.guardRailPad; // 右挡板 X
-      const railTop = pegBounds.topY;                    // 挡板顶端
-      const railBottom = slotRects[0].topY;              // 挡板底端（到得分槽线为止）
-      // 仅在挡板纵向范围内才反弹（顶部之上、底部之下不挡）
-      if (b.y > railTop && b.y < railBottom) {
-        if (b.x - b.r < railL) {
-          b.x = railL + b.r;
-          b.vx = -b.vx * CONFIG.guardRailRestitution;
-        } else if (b.x + b.r > railR) {
-          b.x = railR - b.r;
-          b.vx = -b.vx * CONFIG.guardRailRestitution;
-        }
+    // —— 外围挡板碰撞（开启时生效） ——
+    // 挡板 = 钉阵外圈相邻顶点的连线，用「圆 vs 线段」碰撞让弹珠沿线段法线反弹
+    if (CONFIG.guardRails && hullPath.length >= 2) {
+      const n = hullPath.length;
+      // 跳过底部边（最下面那条让弹珠落下去的边），仅对其他边做碰撞
+      // 找到 y 最大的边（底边）的索引，避免弹珠被底边挡住无法进槽
+      let bottomEdgeIdx = -1, maxY = -Infinity;
+      for (let k = 0; k < n; k++) {
+        const a = hullPath[k], c = hullPath[(k + 1) % n];
+        const ey = (a.y + c.y) / 2;
+        if (ey > maxY) { maxY = ey; bottomEdgeIdx = k; }
+      }
+      for (let k = 0; k < n; k++) {
+        if (k === bottomEdgeIdx) continue; // 跳过底边，保留底部开放
+        const A = hullPath[k], C = hullPath[(k + 1) % n];
+        collideBallSegment(b, A, C, CONFIG.guardRailRestitution);
       }
     }
 
@@ -826,36 +941,40 @@ function drawAimingGuide() {
 }
 
 /* ============================================================
- * ⑧-4 绘制外围挡板（左右两侧竖直挡板，底部开放无挡板）
+ * ⑧-4 绘制外围挡板（沿钉阵外圈顶点连线，跳过最底边）
  * ============================================================ */
 function drawGuardRails() {
-  const railL = pegBounds.minX - CONFIG.guardRailPad;
-  const railR = pegBounds.maxX + CONFIG.guardRailPad;
-  const railTop = pegBounds.topY;
-  const railBottom = slotRects[0].topY;
-  // 金属质感渐变
-  const grad = ctx.createLinearGradient(0, 0, 6, 0);
-  grad.addColorStop(0, '#5a6470');
-  grad.addColorStop(0.5, '#aab2bd');
-  grad.addColorStop(1, '#5a6470');
-
-  // 左挡板
-  const gL = ctx.createLinearGradient(railL - 4, 0, railL + 4, 0);
-  gL.addColorStop(0, '#5a6470'); gL.addColorStop(0.5, '#aab2bd'); gL.addColorStop(1, '#5a6470');
-  ctx.fillStyle = gL;
-  ctx.fillRect(railL - 4, railTop, 8, railBottom - railTop);
-  // 右挡板
-  const gR = ctx.createLinearGradient(railR - 4, 0, railR + 4, 0);
-  gR.addColorStop(0, '#5a6470'); gR.addColorStop(0.5, '#aab2bd'); gR.addColorStop(1, '#5a6470');
-  ctx.fillStyle = gR;
-  ctx.fillRect(railR - 4, railTop, 8, railBottom - railTop);
-
-  // 顶端封口圆点（装饰）
+  if (hullPath.length < 2) return;
+  const n = hullPath.length;
+  // 找到 y 最大的边（底边）的索引，绘制时跳过它
+  let bottomEdgeIdx = -1, maxY = -Infinity;
+  for (let k = 0; k < n; k++) {
+    const a = hullPath[k], c = hullPath[(k + 1) % n];
+    const ey = (a.y + c.y) / 2;
+    if (ey > maxY) { maxY = ey; bottomEdgeIdx = k; }
+  }
+  // 画外圈连线（跳过底边），白色半透明
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.arc(railL, railTop, 5, 0, Math.PI * 2);
-  ctx.arc(railR, railTop, 5, 0, Math.PI * 2);
+  let started = false;
+  for (let k = 0; k < n; k++) {
+    if (k === bottomEdgeIdx) continue; // 跳过底边
+    const a = hullPath[k];
+    if (!started) { ctx.moveTo(a.x, a.y); started = true; }
+    else { ctx.lineTo(a.x, a.y); }
+  }
+  // 闭合到起点（如果起点不是底边端点的话，会自然连回）
+  ctx.stroke();
+  // 外圈顶点高亮圆点（让连线更清晰）
   ctx.fillStyle = '#ffd166';
-  ctx.fill();
+  for (const p of hullPath) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 /* ============================================================
@@ -887,11 +1006,9 @@ function resetGame() {
 launchBtn.addEventListener('click', launchBallFromButton);
 resetBtn.addEventListener('click', resetGame);
 
-// 挡板开关：点击切换 guardRails，并更新按钮文字与高亮
-railBtn.addEventListener('click', () => {
-  CONFIG.guardRails = !CONFIG.guardRails;
-  railBtn.textContent = CONFIG.guardRails ? '挡板：开' : '挡板：关';
-  railBtn.classList.toggle('on', CONFIG.guardRails);
+// 挡板开关：复选框勾选状态直接对应 guardRails
+railChk.addEventListener('change', () => {
+  CONFIG.guardRails = railChk.checked;
 });
 
 // 切换钉阵布局：更新 CONFIG.layout → 重建钉阵 → 重置游戏
