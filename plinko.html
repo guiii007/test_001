@@ -46,30 +46,31 @@
     max-width: 96vw;
   }
 
-  .topbar {
+  .header {
+    margin-bottom: 8px;
+  }
+
+  /* 第一行：标题 + 分数 */
+  .header-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    flex-wrap: nowrap;
-    overflow: visible;
-    padding: 4px 0;
+    justify-content: space-between;
+    margin-bottom: 8px;
   }
 
   .title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 1px;
-    flex-shrink: 0;
-    white-space: nowrap;
+    letter-spacing: 2px;
   }
 
-  /* 按钮组：紧凑排列 */
-  .btn-group {
+  /* 第二行：按钮组（居中排列） */
+  .btn-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .title span { color: var(--accent); }
@@ -79,17 +80,17 @@
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
-    padding: 5px 8px;
-    border-radius: 5px;
-    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: transform .12s ease, background .2s ease, box-shadow .2s ease;
     user-select: none;
     flex-shrink: 0;
     white-space: nowrap;
-    height: 28px;
-    line-height: 1;
+    height: auto;
+    line-height: 1.4;
   }
   .btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.1); }
   .btn:active { transform: translateY(0); }
@@ -97,10 +98,12 @@
   .btn-launch {
     background: linear-gradient(135deg, var(--accent), #ff5e3a);
     border: none;
-    box-shadow: 0 2px 8px rgba(255,140,66,0.3);
-    padding: 5px 10px;
+    box-shadow: 0 4px 14px rgba(255,140,66,0.35);
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 700;
   }
-  .btn-launch:hover { box-shadow: 0 4px 12px rgba(255,140,66,0.4); }
+  .btn-launch:hover { box-shadow: 0 6px 20px rgba(255,140,66,0.5); }
 
   .btn-reset {
     background: rgba(108,117,125,0.7);
@@ -108,33 +111,33 @@
   }
   .btn-reset:hover { background: rgba(108,117,125,0.9); }
 
-  /* 挡板开关：紧凑复选框样式 */
+  /* 挡板开关 */
   .rail-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 10px;
+    gap: 6px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text);
     cursor: pointer;
     user-select: none;
-    padding: 3px 6px;
-    border-radius: 4px;
+    padding: 8px 12px;
+    border-radius: 8px;
     background: var(--panel);
     border: 1px solid var(--border);
     transition: background .2s ease;
     flex-shrink: 0;
-    height: 28px;
-    line-height: 1;
+    height: auto;
+    line-height: 1.4;
   }
   .rail-toggle:hover { background: rgba(255,255,255,0.1); }
   .rail-toggle input {
     appearance: none;
     -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     border: 2px solid var(--muted);
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
     position: relative;
     transition: background .15s ease, border-color .15s ease;
@@ -147,28 +150,28 @@
   .rail-toggle input:checked::after {
     content: "";
     position: absolute;
-    left: 3px;
-    top: -1px;
-    width: 5px;
-    height: 9px;
+    left: 5px;
+    top: 0px;
+    width: 6px;
+    height: 11px;
     border: solid #0f1424;
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
   }
 
-  /* 布局选择下拉框（复用 btn 外观） */
+  /* 布局选择下拉框 */
   .layout-sel {
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 5px 8px;
-    border-radius: 5px;
-    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     outline: none;
     flex-shrink: 0;
-    height: 28px;
+    height: auto;
   }
   .layout-sel:hover { background: rgba(255,255,255,0.1); }
   .layout-sel option { background: var(--bg-2); color: var(--text); }
@@ -178,23 +181,23 @@
     background: var(--panel);
     border: 1px solid var(--border);
     backdrop-filter: blur(8px);
-    border-radius: 6px;
-    padding: 3px 10px;
-    text-align: center;
-    min-width: 70px;
+    border-radius: 8px;
+    padding: 4px 14px;
+    text-align: right;
+    min-width: 80px;
     flex-shrink: 0;
   }
   .score-card .label {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--muted);
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
   }
   .score-card .value {
     font-family: "Courier New", monospace;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--accent-2);
-    line-height: 1.2;
+    line-height: 1.1;
     transition: transform .15s ease;
   }
   .score-card .value.bump { transform: scale(1.18); }
@@ -222,11 +225,18 @@
 </head>
 <body>
   <div class="game-wrap">
-    <!-- 顶部控制栏：紧凑按钮组 + 分数卡片 -->
-    <div class="topbar">
-      <div class="title">倒弹珠 <span>PLINKO</span></div>
-      <!-- 按钮组：紧凑排列，可水平滚动 -->
-      <div class="btn-group">
+    <!-- 顶部控制区：两行布局，充分利用空间 -->
+    <div class="header">
+      <!-- 第一行：标题 + 分数卡片 -->
+      <div class="header-row">
+        <div class="title">倒弹珠 <span>PLINKO</span></div>
+        <div class="score-card">
+          <div class="label">分数</div>
+          <div class="value" id="scoreVal">0</div>
+        </div>
+      </div>
+      <!-- 第二行：按钮组（居中排列，方便点击） -->
+      <div class="btn-row">
         <select class="btn layout-sel" id="layoutSel" title="选择钉阵布局">
           <option value="triangle">三角形</option>
           <option value="grid">正方形网格</option>
@@ -237,13 +247,8 @@
           <input type="checkbox" id="railChk" />
           <span>挡板</span>
         </label>
-        <button class="btn btn-reset" id="resetBtn">重置</button>
-        <button class="btn btn-launch" id="launchBtn">发射</button>
-      </div>
-      <!-- 实时分数卡片 -->
-      <div class="score-card">
-        <div class="label">分数</div>
-        <div class="value" id="scoreVal">0</div>
+        <button class="btn btn-reset" id="resetBtn">重置游戏</button>
+        <button class="btn btn-launch" id="launchBtn">发射弹珠</button>
       </div>
     </div>
 
