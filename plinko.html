@@ -49,22 +49,29 @@
   .topbar {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 10px;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
+    overflow: visible;
     padding: 4px 0;
   }
-  .topbar::-webkit-scrollbar { display: none; }
 
   .title {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
-    letter-spacing: 2px;
-    margin-right: auto;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* 按钮组：紧凑排列 */
+  .btn-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     flex-shrink: 0;
   }
+
   .title span { color: var(--accent); }
 
   /* 通用按钮样式 */
@@ -72,8 +79,8 @@
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
-    padding: 6px 10px;
-    border-radius: 6px;
+    padding: 5px 8px;
+    border-radius: 5px;
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
@@ -81,51 +88,53 @@
     user-select: none;
     flex-shrink: 0;
     white-space: nowrap;
+    height: 28px;
+    line-height: 1;
   }
-  .btn:hover { transform: translateY(-1px); }
+  .btn:hover { transform: translateY(-1px); background: rgba(255,255,255,0.1); }
   .btn:active { transform: translateY(0); }
 
   .btn-launch {
     background: linear-gradient(135deg, var(--accent), #ff5e3a);
     border: none;
-    box-shadow: 0 4px 14px rgba(255,140,66,0.35);
-    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(255,140,66,0.3);
+    padding: 5px 10px;
   }
-  .btn-launch:hover { box-shadow: 0 6px 20px rgba(255,140,66,0.5); }
+  .btn-launch:hover { box-shadow: 0 4px 12px rgba(255,140,66,0.4); }
 
   .btn-reset {
-    background: var(--danger);
+    background: rgba(108,117,125,0.7);
     border: none;
-    opacity: 0.85;
-    flex-shrink: 0;
   }
-  .btn-reset:hover { opacity: 1; }
+  .btn-reset:hover { background: rgba(108,117,125,0.9); }
 
-  /* 挡板开关：紧凑复选框样式，不占额外按钮宽度 */
+  /* 挡板开关：紧凑复选框样式 */
   .rail-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 11px;
+    gap: 3px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--text);
     cursor: pointer;
     user-select: none;
-    padding: 4px 6px;
-    border-radius: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
     background: var(--panel);
     border: 1px solid var(--border);
     transition: background .2s ease;
     flex-shrink: 0;
+    height: 28px;
+    line-height: 1;
   }
   .rail-toggle:hover { background: rgba(255,255,255,0.1); }
   .rail-toggle input {
     appearance: none;
     -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid var(--muted);
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
     position: relative;
     transition: background .15s ease, border-color .15s ease;
@@ -138,10 +147,10 @@
   .rail-toggle input:checked::after {
     content: "";
     position: absolute;
-    left: 4px;
-    top: 0px;
+    left: 3px;
+    top: -1px;
     width: 5px;
-    height: 10px;
+    height: 9px;
     border: solid #0f1424;
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
@@ -152,41 +161,40 @@
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 6px 10px;
-    border-radius: 8px;
+    padding: 5px 8px;
+    border-radius: 5px;
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     outline: none;
     flex-shrink: 0;
+    height: 28px;
   }
   .layout-sel:hover { background: rgba(255,255,255,0.1); }
   .layout-sel option { background: var(--bg-2); color: var(--text); }
 
-  /* 分数卡片（作为 topbar 内的 flex 项，不再使用绝对定位） */
+  /* 分数卡片 */
   .score-card {
     background: var(--panel);
     border: 1px solid var(--border);
     backdrop-filter: blur(8px);
-    border-radius: 8px;
-    padding: 4px 12px;
-    text-align: right;
-    min-width: 85px;
-    margin-left: 6px;
+    border-radius: 6px;
+    padding: 3px 10px;
+    text-align: center;
+    min-width: 70px;
     flex-shrink: 0;
   }
   .score-card .label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
-    letter-spacing: 1px;
-    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
   .score-card .value {
     font-family: "Courier New", monospace;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--accent-2);
-    line-height: 1.1;
+    line-height: 1.2;
     transition: transform .15s ease;
   }
   .score-card .value.bump { transform: scale(1.18); }
@@ -214,26 +222,27 @@
 </head>
 <body>
   <div class="game-wrap">
-    <!-- 顶部控制栏：标题 + 布局选择 + 按钮 + 分数卡片，横向排列互不遮挡 -->
+    <!-- 顶部控制栏：紧凑按钮组 + 分数卡片 -->
     <div class="topbar">
       <div class="title">倒弹珠 <span>PLINKO</span></div>
-      <!-- 钉阵布局选择器：切换不同几何形状的钉子排列 -->
-      <select class="btn layout-sel" id="layoutSel" title="选择钉阵布局">
-        <option value="triangle">三角形</option>
-        <option value="grid">正方形网格</option>
-        <option value="diamond">菱形</option>
-        <option value="hexagon">蜂巢</option>
-      </select>
-      <!-- 外围挡板开关：紧凑复选框样式，不占额外按钮宽度 -->
-      <label class="rail-toggle" title="开/关外围挡板">
-        <input type="checkbox" id="railChk" />
-        <span>挡板</span>
-      </label>
-      <button class="btn btn-reset" id="resetBtn">重置游戏</button>
-      <button class="btn btn-launch" id="launchBtn">发射弹珠</button>
-      <!-- 实时分数卡片（作为 topbar 最后一项） -->
+      <!-- 按钮组：紧凑排列，可水平滚动 -->
+      <div class="btn-group">
+        <select class="btn layout-sel" id="layoutSel" title="选择钉阵布局">
+          <option value="triangle">三角形</option>
+          <option value="grid">正方形网格</option>
+          <option value="diamond">菱形</option>
+          <option value="hexagon">蜂巢</option>
+        </select>
+        <label class="rail-toggle" title="开/关外围挡板">
+          <input type="checkbox" id="railChk" />
+          <span>挡板</span>
+        </label>
+        <button class="btn btn-reset" id="resetBtn">重置</button>
+        <button class="btn btn-launch" id="launchBtn">发射</button>
+      </div>
+      <!-- 实时分数卡片 -->
       <div class="score-card">
-        <div class="label">Total Score</div>
+        <div class="label">分数</div>
         <div class="value" id="scoreVal">0</div>
       </div>
     </div>
