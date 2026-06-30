@@ -49,15 +49,21 @@
   .topbar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 6px;
+    margin-bottom: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 4px 0;
   }
+  .topbar::-webkit-scrollbar { display: none; }
 
   .title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     letter-spacing: 2px;
     margin-right: auto;
+    flex-shrink: 0;
   }
   .title span { color: var(--accent); }
 
@@ -66,13 +72,15 @@
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
-    padding: 9px 18px;
-    border-radius: 10px;
-    font-size: 14px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     transition: transform .12s ease, background .2s ease, box-shadow .2s ease;
     user-select: none;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .btn:hover { transform: translateY(-1px); }
   .btn:active { transform: translateY(0); }
@@ -81,6 +89,7 @@
     background: linear-gradient(135deg, var(--accent), #ff5e3a);
     border: none;
     box-shadow: 0 4px 14px rgba(255,140,66,0.35);
+    flex-shrink: 0;
   }
   .btn-launch:hover { box-shadow: 0 6px 20px rgba(255,140,66,0.5); }
 
@@ -88,6 +97,7 @@
     background: var(--danger);
     border: none;
     opacity: 0.85;
+    flex-shrink: 0;
   }
   .btn-reset:hover { opacity: 1; }
 
@@ -95,17 +105,18 @@
   .rail-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 13px;
+    gap: 4px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text);
     cursor: pointer;
     user-select: none;
-    padding: 4px 8px;
-    border-radius: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
     background: var(--panel);
     border: 1px solid var(--border);
     transition: background .2s ease;
+    flex-shrink: 0;
   }
   .rail-toggle:hover { background: rgba(255,255,255,0.1); }
   .rail-toggle input {
@@ -141,12 +152,13 @@
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border);
-    padding: 8px 12px;
-    border-radius: 10px;
-    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     outline: none;
+    flex-shrink: 0;
   }
   .layout-sel:hover { background: rgba(255,255,255,0.1); }
   .layout-sel option { background: var(--bg-2); color: var(--text); }
@@ -156,11 +168,12 @@
     background: var(--panel);
     border: 1px solid var(--border);
     backdrop-filter: blur(8px);
-    border-radius: 12px;
-    padding: 6px 16px;
+    border-radius: 8px;
+    padding: 4px 12px;
     text-align: right;
-    min-width: 110px;
-    margin-left: 8px;
+    min-width: 85px;
+    margin-left: 6px;
+    flex-shrink: 0;
   }
   .score-card .label {
     font-size: 11px;
@@ -306,8 +319,8 @@ let balls = [];     // 当前下落中的弹珠列表
 let pegs = [];      // 钉子列表 {x, y, r}
 let totalScore = 0; // 总得分
 let slotRects = []; // 底部得分槽矩形 {x, w, score}
-let hullPath = []; // 钉阵外圈顶点序列（顺时针，用于挡板绘制与碰撞）
-let pegBounds = { minX: 0, maxX: W, topY: 0, bottomY: 0 }; // 钉阵包围盒（保留备用）
+let leftRail = [];  // 左侧挡板顶点序列（每层最左钉子，从上到下）
+let rightRail = []; // 右侧挡板顶点序列（每层最右钉子，从上到下）
 
 // DOM 元素引用
 const scoreEl = document.getElementById('scoreVal');
@@ -330,45 +343,26 @@ function buildPegs() {
     case 'triangle':
     default:        buildTrianglePegs(); break;
   }
-  // 计算钉阵外圈顶点序列（用于挡板）+ 包围盒
+  // 按行分组，取每行最左/最右钉子作为左右挡板顶点
   if (pegs.length > 0) {
-    let minX = Infinity, maxX = -Infinity, topY = Infinity, bottomY = -Infinity;
+    const rows = new Map();
     for (const p of pegs) {
-      if (p.x - p.r < minX) minX = p.x - p.r;
-      if (p.x + p.r > maxX) maxX = p.x + p.r;
-      if (p.y - p.r < topY) topY = p.y - p.r;
-      if (p.y + p.r > bottomY) bottomY = p.y + p.r;
+      if (!rows.has(p.y)) rows.set(p.y, []);
+      rows.get(p.y).push(p);
     }
-    pegBounds = { minX, maxX, topY, bottomY };
-    // 用凸包算法求外圈顶点序列（Andrew 单调链）
-    hullPath = convexHull(pegs.map(p => ({ x: p.x, y: p.y })));
+    // 按 y 排序行，确保从上到下
+    const sortedRows = Array.from(rows.values()).sort((a, b) => a[0].y - b[0].y);
+    leftRail = [];
+    rightRail = [];
+    for (const row of sortedRows) {
+      row.sort((a, b) => a.x - b.x);
+      leftRail.push({ x: row[0].x, y: row[0].y });
+      rightRail.push({ x: row[row.length - 1].x, y: row[row.length - 1].y });
+    }
   } else {
-    pegBounds = { minX: 0, maxX: W, topY: 0, bottomY: 0 };
-    hullPath = [];
+    leftRail = [];
+    rightRail = [];
   }
-}
-
-/* Andrew 单调链凸包算法：输入点集，返回顺时针外圈顶点序列 */
-function convexHull(points) {
-  const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
-  const n = pts.length;
-  if (n < 2) return pts.slice();
-  const cross = (O, A, B) => (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
-  // 下半包
-  const lower = [];
-  for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-    lower.push(p);
-  }
-  // 上半包
-  const upper = [];
-  for (let i = n - 1; i >= 0; i--) {
-    const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-    upper.push(p);
-  }
-  lower.pop(); upper.pop();
-  return lower.concat(upper); // 顺时针闭合路径
 }
 
 /* —— 三角形：每层钉数递增，整体居中（经典 Plinko） —— */
@@ -643,21 +637,48 @@ function updatePhysics() {
     }
 
     // —— 外围挡板碰撞（开启时生效） ——
-    // 挡板 = 钉阵外圈相邻顶点的连线，用「圆 vs 线段」碰撞让弹珠沿线段法线反弹
-    if (CONFIG.guardRails && hullPath.length >= 2) {
-      const n = hullPath.length;
-      // 跳过底部边（最下面那条让弹珠落下去的边），仅对其他边做碰撞
-      // 找到 y 最大的边（底边）的索引，避免弹珠被底边挡住无法进槽
-      let bottomEdgeIdx = -1, maxY = -Infinity;
-      for (let k = 0; k < n; k++) {
-        const a = hullPath[k], c = hullPath[(k + 1) % n];
-        const ey = (a.y + c.y) / 2;
-        if (ey > maxY) { maxY = ey; bottomEdgeIdx = k; }
+    // 挡板 = 每层最左/最右钉子的连线，左右两侧各一条折线，底部开放
+    if (CONFIG.guardRails) {
+      // 左侧挡板：从上到下连点
+      for (let i = 0; i < leftRail.length - 1; i++) {
+        collideBallSegment(b, leftRail[i], leftRail[i + 1], CONFIG.guardRailRestitution);
       }
-      for (let k = 0; k < n; k++) {
-        if (k === bottomEdgeIdx) continue; // 跳过底边，保留底部开放
-        const A = hullPath[k], C = hullPath[(k + 1) % n];
-        collideBallSegment(b, A, C, CONFIG.guardRailRestitution);
+      // 右侧挡板：从上到下连点
+      for (let i = 0; i < rightRail.length - 1; i++) {
+        collideBallSegment(b, rightRail[i], rightRail[i + 1], CONFIG.guardRailRestitution);
+      }
+    }
+
+    // —— 弹珠之间碰撞（动量守恒，实体碰撞效果） ——
+    for (let j = balls.length - 1; j >= 0; j--) {
+      const b2 = balls[j];
+      if (b === b2) continue;
+      const dx = b.x - b2.x;
+      const dy = b.y - b2.y;
+      const dist = Math.hypot(dx, dy);
+      const minDist = b.r + b2.r;
+      if (dist < minDist && dist > 0) {
+        // 法线方向单位向量（从 b2 指向 b）
+        const nx = dx / dist;
+        const ny = dy / dist;
+        // 分离两个弹珠（各推一半重叠距离）
+        const overlap = (minDist - dist) / 2;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        b2.x -= nx * overlap;
+        b2.y -= ny * overlap;
+        // 动量守恒：相对速度在法线方向交换（质量相同的弹性碰撞）
+        const dvx = b.vx - b2.vx;
+        const dvy = b.vy - b2.vy;
+        const dvDotN = dvx * nx + dvy * ny;
+        // 仅当朝对方运动时才交换速度
+        if (dvDotN < 0) {
+          const j = -(1 + CONFIG.restitution) * dvDotN; // 冲量
+          b.vx += j * nx;
+          b.vy += j * ny;
+          b2.vx -= j * nx;
+          b2.vy -= j * ny;
+        }
       }
     }
 
@@ -941,36 +962,40 @@ function drawAimingGuide() {
 }
 
 /* ============================================================
- * ⑧-4 绘制外围挡板（沿钉阵外圈顶点连线，跳过最底边）
+ * ⑧-4 绘制外围挡板（左右两侧各一条折线，沿每层最左/最右钉子连线）
  * ============================================================ */
 function drawGuardRails() {
-  if (hullPath.length < 2) return;
-  const n = hullPath.length;
-  // 找到 y 最大的边（底边）的索引，绘制时跳过它
-  let bottomEdgeIdx = -1, maxY = -Infinity;
-  for (let k = 0; k < n; k++) {
-    const a = hullPath[k], c = hullPath[(k + 1) % n];
-    const ey = (a.y + c.y) / 2;
-    if (ey > maxY) { maxY = ey; bottomEdgeIdx = k; }
-  }
-  // 画外圈连线（跳过底边），白色半透明
+  if (leftRail.length < 2 || rightRail.length < 2) return;
+  // 白色半透明粗线
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
+  // 左侧挡板：从上到下连点（沿最左侧钉子边缘）
   ctx.beginPath();
-  let started = false;
-  for (let k = 0; k < n; k++) {
-    if (k === bottomEdgeIdx) continue; // 跳过底边
-    const a = hullPath[k];
-    if (!started) { ctx.moveTo(a.x, a.y); started = true; }
-    else { ctx.lineTo(a.x, a.y); }
+  ctx.moveTo(leftRail[0].x, leftRail[0].y);
+  for (let i = 1; i < leftRail.length; i++) {
+    ctx.lineTo(leftRail[i].x, leftRail[i].y);
   }
-  // 闭合到起点（如果起点不是底边端点的话，会自然连回）
   ctx.stroke();
-  // 外圈顶点高亮圆点（让连线更清晰）
+
+  // 右侧挡板：从上到下连点（沿最右侧钉子边缘）
+  ctx.beginPath();
+  ctx.moveTo(rightRail[0].x, rightRail[0].y);
+  for (let i = 1; i < rightRail.length; i++) {
+    ctx.lineTo(rightRail[i].x, rightRail[i].y);
+  }
+  ctx.stroke();
+
+  // 外圈顶点高亮圆点（让折线更清晰，标记钉子位置）
   ctx.fillStyle = '#ffd166';
-  for (const p of hullPath) {
+  for (const p of leftRail) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const p of rightRail) {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
     ctx.fill();
