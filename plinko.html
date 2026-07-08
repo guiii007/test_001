@@ -951,9 +951,10 @@ function buildTopCurvedRail(sortedRows) {
   const leftEndX = leftRail[0].x - sx * 0.5;
   pinballOuterRail.push({ x: leftEndX, y: lastOuterPoint.y });
   
-  // ===== 内挡板（内侧的墙）：左竖 + 内弧 + 底横 =====
-  // 1. 左侧竖直段（从底部入口向上到弧形起点）
-  pinballInnerRail.push({ x: innerX, y: bottomY });
+  // ===== 内挡板（内侧的墙）：左竖 + 内弧 =====
+  // 1. 左侧竖直段（从弧形起点向上一段距离，不延伸到底部）
+  const innerVerticalTopY = arcCenterY - 60;
+  pinballInnerRail.push({ x: innerX, y: innerVerticalTopY });
   pinballInnerRail.push({ x: innerX, y: arcCenterY });
   
   // 2. 弧形段（内弧，从正右方0°转到正上方90°）
@@ -964,11 +965,6 @@ function buildTopCurvedRail(sortedRows) {
       y: arcCenterY - innerR * Math.sin(angle)
     });
   }
-  
-  // 3. 底部水平段（通道底部的墙，向左延伸，留出口让球掉下去）
-  const lastInnerPoint = pinballInnerRail[pinballInnerRail.length - 1];
-  const exitX = leftRail[0].x + sx * 2; // 出口位置
-  pinballInnerRail.push({ x: exitX, y: lastInnerPoint.y });
   
   // 保留 topCurvedRail 兼容旧代码
   topCurvedRail = pinballOuterRail.slice();
