@@ -952,10 +952,9 @@ function buildTopCurvedRail(sortedRows) {
   pinballOuterRail.push({ x: leftEndX, y: lastOuterPoint.y });
   
   // ===== 内挡板（内侧的墙）：左竖 + 内弧 =====
-  // 1. 左侧竖直段（从弧形起点向上一段距离，不延伸到底部）
-  const innerVerticalTopY = arcCenterY - 60;
-  pinballInnerRail.push({ x: innerX, y: innerVerticalTopY });
+  // 1. 左侧竖直段（从弧形起点向下延伸到底部入口，与外挡板平齐）
   pinballInnerRail.push({ x: innerX, y: arcCenterY });
+  pinballInnerRail.push({ x: innerX, y: bottomY });
   
   // 2. 弧形段（内弧，从正右方0°转到正上方90°）
   for (let i = 1; i <= segments; i++) {
