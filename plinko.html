@@ -680,6 +680,8 @@ let slotRects = []; // 底部得分槽矩形 {x, w, score}
 let leftRail = [];  // 左侧挡板顶点序列（每层最左钉子，从上到下）
 let rightRail = []; // 右侧挡板顶点序列（每层最右钉子，从上到下）
 let topCurvedRail = []; // 顶部弧形挡板（弹球机风格，用于grid/hexagon布局）
+let pinballOuterRail = []; // 弹珠机通道-外挡板
+let pinballInnerRail = []; // 弹珠机通道-内挡板
 
 // DOM 元素引用
 const scoreEl = document.getElementById('scoreVal');
@@ -900,44 +902,76 @@ function buildPegs() {
   }
 }
 
-/* —— 构建右侧弧形挡板（弹球机风格：右侧垂直上升 + 顶部弧形左拐） —— */
+/* —— 构建弹珠机风格双通道（右侧竖直通道 + 顶部弧形通道 + 左侧出口） —— */
 function buildTopCurvedRail(sortedRows) {
   topCurvedRail = [];
+  pinballOuterRail = [];
+  pinballInnerRail = [];
+  
   const sx = CONFIG.pegSpacingX;
-
-  // 右侧轨道 X 坐标（贴到区域最右侧）
-  const rightRailX = W;
-  // 顶部 Y 坐标
-  const topY = 20;
-  // 弧形半径（加大，弯曲更明显）
-  const arcRadius = sx * 4;
-
-  // 底部起点（发射器附近，向上）
+  const channelWidth = 36; // 通道宽度
+  
+  // 外挡板位置（最右侧贴边）
+  const outerX = W - 2;
+  // 内挡板位置（外挡板往左一个通道宽度）
+  const innerX = outerX - channelWidth;
+  
+  // 顶部 Y 坐标（外挡板水平段的顶部）
+  const topY = 50;
+  // 外弧半径
+  const outerR = 100;
+  // 内弧半径
+  const innerR = outerR - channelWidth;
+  
+  // 弧形圆心
+  const arcCenterX = outerX - outerR;
+  const arcCenterY = topY + outerR;
+  
+  // 底部起点（通道入口）
   const bottomY = sortedRows[sortedRows.length - 1][0].y + sx * 0.5;
-
-  // 1. 右侧垂直段（从底部向上到弧形起点）
-  topCurvedRail.push({ x: rightRailX, y: bottomY });
-  topCurvedRail.push({ x: rightRailX, y: topY + arcRadius });
-
-  // 2. 弧形段（从右侧垂直向上，向左弯成水平）
-  const arcCenterX = rightRailX - arcRadius;
-  const arcCenterY = topY + arcRadius;
-  // 从正右方（0度）逆时针转到正上方（90度）
-  const startAngle = 0;
-  const endAngle = Math.PI / 2;
-  const segments = 35;
+  
+  const segments = 40;
+  
+  // ===== 外挡板（外侧的墙）：右竖 + 外弧 + 顶横 =====
+  // 1. 右侧竖直段（从底部入口向上到弧形起点）
+  pinballOuterRail.push({ x: outerX, y: bottomY });
+  pinballOuterRail.push({ x: outerX, y: arcCenterY });
+  
+  // 2. 弧形段（外弧，从正右方0°转到正上方90°）
   for (let i = 1; i <= segments; i++) {
-    const angle = startAngle + (endAngle - startAngle) * (i / segments);
-    topCurvedRail.push({
-      x: arcCenterX + arcRadius * Math.cos(angle),
-      y: arcCenterY - arcRadius * Math.sin(angle)
+    const angle = (Math.PI / 2) * (i / segments); // 0 到 90度
+    pinballOuterRail.push({
+      x: arcCenterX + outerR * Math.cos(angle),
+      y: arcCenterY - outerR * Math.sin(angle)
     });
   }
-
+  
   // 3. 顶部水平段（从弧形终点向左延伸到钉阵左侧）
-  const lastArcPoint = topCurvedRail[topCurvedRail.length - 1];
+  const lastOuterPoint = pinballOuterRail[pinballOuterRail.length - 1];
   const leftEndX = leftRail[0].x - sx * 0.5;
-  topCurvedRail.push({ x: leftEndX, y: lastArcPoint.y });
+  pinballOuterRail.push({ x: leftEndX, y: lastOuterPoint.y });
+  
+  // ===== 内挡板（内侧的墙）：左竖 + 内弧 + 底横 =====
+  // 1. 左侧竖直段（从底部入口向上到弧形起点）
+  pinballInnerRail.push({ x: innerX, y: bottomY });
+  pinballInnerRail.push({ x: innerX, y: arcCenterY });
+  
+  // 2. 弧形段（内弧，从正右方0°转到正上方90°）
+  for (let i = 1; i <= segments; i++) {
+    const angle = (Math.PI / 2) * (i / segments);
+    pinballInnerRail.push({
+      x: arcCenterX + innerR * Math.cos(angle),
+      y: arcCenterY - innerR * Math.sin(angle)
+    });
+  }
+  
+  // 3. 底部水平段（通道底部的墙，向左延伸，留出口让球掉下去）
+  const lastInnerPoint = pinballInnerRail[pinballInnerRail.length - 1];
+  const exitX = leftRail[0].x + sx * 2; // 出口位置
+  pinballInnerRail.push({ x: exitX, y: lastInnerPoint.y });
+  
+  // 保留 topCurvedRail 兼容旧代码
+  topCurvedRail = pinballOuterRail.slice();
 }
 
 /* —— 三角形：每层钉数递增，整体居中（经典 Plinko） —— */
@@ -1055,7 +1089,22 @@ function launchBall(vx, vy) {
 
 /* 按钮发射：垂直下落 + 微小随机水平扰动（无需拖动时的快捷发射） */
 function launchBallFromButton() {
-  launchBall((Math.random() - 0.5) * CONFIG.launchJitter, 0);
+  const isPinballStyle = (CONFIG.layout === 'grid' || CONFIG.layout === 'hexagon') && CONFIG.guardRails;
+  if (isPinballStyle && pinballInnerRail.length > 1) {
+    // 弹珠机风格：从通道底部入口发射，向上弹
+    const entryX = (pinballOuterRail[0].x + pinballInnerRail[0].x) / 2;
+    const entryY = pinballOuterRail[0].y - 30;
+    balls.push({
+      x: entryX + (Math.random() - 0.5) * 4,
+      y: entryY,
+      vx: (Math.random() - 0.5) * 2,
+      vy: -28, // 向上的初速度，足够冲到顶部
+      r: CONFIG.ballRadius,
+      settled: false,
+    });
+  } else {
+    launchBall((Math.random() - 0.5) * CONFIG.launchJitter, 0);
+  }
 }
 
 /* 把鼠标/触摸事件坐标换算成画布内部坐标（处理 CSS 缩放） */
@@ -1225,9 +1274,13 @@ function updatePhysics() {
           collideBallSegment(b, leftRail[j], leftRail[j + 1], CONFIG.guardRailRestitution);
         }
         const isPinballStyle = (CONFIG.layout === 'grid' || CONFIG.layout === 'hexagon');
-        if (isPinballStyle && topCurvedRail.length > 1) {
-          for (let j = 0; j < topCurvedRail.length - 1; j++) {
-            collideBallSegment(b, topCurvedRail[j], topCurvedRail[j + 1], CONFIG.guardRailRestitution);
+        if (isPinballStyle && pinballOuterRail.length > 1) {
+          // 弹珠机风格：内外两条挡板形成通道
+          for (let j = 0; j < pinballOuterRail.length - 1; j++) {
+            collideBallSegment(b, pinballOuterRail[j], pinballOuterRail[j + 1], CONFIG.guardRailRestitution);
+          }
+          for (let j = 0; j < pinballInnerRail.length - 1; j++) {
+            collideBallSegment(b, pinballInnerRail[j], pinballInnerRail[j + 1], CONFIG.guardRailRestitution);
           }
         } else {
           for (let j = 0; j < rightRail.length - 1; j++) {
@@ -1561,12 +1614,21 @@ function drawGuardRails() {
   // 弹球机风格：右侧轨道 + 顶部弧形（grid/hexagon 布局）
   const isPinballStyle = (CONFIG.layout === 'grid' || CONFIG.layout === 'hexagon');
 
-  if (isPinballStyle && topCurvedRail.length > 1) {
-    // 弹球机风格：只画外层轨道，不画 rightRail
+  if (isPinballStyle && pinballOuterRail.length > 1) {
+    // 弹球机风格：画内外两条挡板形成通道
+    // 外挡板
     ctx.beginPath();
-    ctx.moveTo(topCurvedRail[0].x, topCurvedRail[0].y);
-    for (let i = 1; i < topCurvedRail.length; i++) {
-      ctx.lineTo(topCurvedRail[i].x, topCurvedRail[i].y);
+    ctx.moveTo(pinballOuterRail[0].x, pinballOuterRail[0].y);
+    for (let i = 1; i < pinballOuterRail.length; i++) {
+      ctx.lineTo(pinballOuterRail[i].x, pinballOuterRail[i].y);
+    }
+    ctx.stroke();
+    
+    // 内挡板
+    ctx.beginPath();
+    ctx.moveTo(pinballInnerRail[0].x, pinballInnerRail[0].y);
+    for (let i = 1; i < pinballInnerRail.length; i++) {
+      ctx.lineTo(pinballInnerRail[i].x, pinballInnerRail[i].y);
     }
     ctx.stroke();
   } else if (rightRail.length >= 2) {
