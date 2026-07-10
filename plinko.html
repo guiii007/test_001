@@ -683,6 +683,9 @@ let topCurvedRail = []; // 顶部弧形挡板（弹球机风格，用于grid/hex
 let pinballOuterRail = []; // 弹珠机通道-外挡板
 let pinballInnerRail = []; // 弹珠机通道-内挡板
 
+let targetSlotIndex = -1; // 目标落点槽位索引
+let bonusEffect = { active: false, x: 0, y: 0, time: 0 };
+
 // DOM 元素引用
 const scoreEl = document.getElementById('scoreVal');
 const launchBtn = document.getElementById('launchBtn');
@@ -697,6 +700,61 @@ const drawLineBtn = document.getElementById('drawLine');
 const drawCurveBtn = document.getElementById('drawCurve');
 const drawUndoBtn = document.getElementById('drawUndo');
 const drawClearBtn = document.getElementById('drawClear');
+
+// 音效系统
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playSound(type, volume = 0.3) {
+  if (!audioCtx) initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  if (type === 'peg') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800 + Math.random() * 400, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(volume * 0.5, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  } else if (type === 'rail') {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(300 + Math.random() * 200, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(volume * 0.4, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.08);
+  } else if (type === 'launch') {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(volume * 0.6, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  } else if (type === 'bonus') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(784, audioCtx.currentTime + 0.2);
+    osc.frequency.setValueAtTime(1047, audioCtx.currentTime + 0.3);
+    gain.gain.setValueAtTime(volume * 0.8, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.6);
+  }
+}
 const helpBtn = document.getElementById('helpBtn');
 const tutorialOverlay = document.getElementById('tutorialOverlay');
 const tutorialClose = document.getElementById('tutorialClose');
@@ -993,9 +1051,23 @@ function buildGridPegs() {
   const sy = CONFIG.pegSpacingY;
   const startY = CONFIG.pegStartY;
   const startX = 35;
+  
+  const outerX = W - 2;
+  const channelWidth = 36;
+  const innerX = outerX - channelWidth;
+  const innerVerticalTopY = CONFIG.pegStartY + 20;
+  const innerVerticalBottomY = CONFIG.pegStartY + (rows - 1) * sy + sx * 0.5;
+  
   for (let row = 0; row < rows; row++) {
     for (let i = 0; i < cols; i++) {
-      pegs.push({ x: startX + i * sx, y: startY + row * sy, r: CONFIG.pegRadius });
+      const pegX = startX + i * sx;
+      const pegY = startY + row * sy;
+      
+      if (Math.abs(pegX - innerX) < sx * 0.3 && pegY >= innerVerticalTopY && pegY <= innerVerticalBottomY) {
+        continue;
+      }
+      
+      pegs.push({ x: pegX, y: pegY, r: CONFIG.pegRadius });
     }
   }
 }
@@ -1026,11 +1098,24 @@ function buildHexagonPegs() {
   const sy = CONFIG.pegSpacingY;
   const startY = CONFIG.pegStartY;
   const startX = 35;
+  
+  const outerX = W - 2;
+  const channelWidth = 36;
+  const innerX = outerX - channelWidth;
+  const innerVerticalTopY = CONFIG.pegStartY + 20;
+  const innerVerticalBottomY = CONFIG.pegStartY + (rows - 1) * sy + sx * 0.5;
+  
   for (let row = 0; row < rows; row++) {
-    // 奇数行向右偏移半个间距，模拟蜂巢交错
     const offsetX = (row % 2 === 1) ? sx / 2 : 0;
     for (let i = 0; i < cols; i++) {
-      pegs.push({ x: startX + i * sx + offsetX, y: startY + row * sy, r: CONFIG.pegRadius });
+      const pegX = startX + i * sx + offsetX;
+      const pegY = startY + row * sy;
+      
+      if (Math.abs(pegX - innerX) < sx * 0.3 && pegY >= innerVerticalTopY && pegY <= innerVerticalBottomY) {
+        continue;
+      }
+      
+      pegs.push({ x: pegX, y: pegY, r: CONFIG.pegRadius });
     }
   }
 }
@@ -1043,7 +1128,6 @@ function buildSlots() {
   slotRects = [];
   const n = CONFIG.slots.length;
   const slotW = W / n;
-  // 槽位顶部 Y（弹珠到达此线即结算）
   const slotTopY = CONFIG.pegStartY + (CONFIG.pegRows - 1) * CONFIG.pegSpacingY + 60;
   for (let i = 0; i < n; i++) {
     slotRects.push({
@@ -1051,10 +1135,23 @@ function buildSlots() {
       w: slotW,
       score: CONFIG.slots[i],
       topY: slotTopY,
-      subtotal: 0,   // 该槽累计得分（每命中一颗弹珠累加）
-      hits: 0,       // 该槽命中弹珠数
+      subtotal: 0,
+      hits: 0,
     });
   }
+  setTargetSlot();
+}
+
+function setTargetSlot() {
+  targetSlotIndex = Math.floor(Math.random() * slotRects.length);
+}
+
+function triggerBonusEffect(x, y) {
+  playSound('bonus');
+  bonusEffect = { active: true, x: x, y: y, time: 0 };
+  setTimeout(() => {
+    setTargetSlot();
+  }, 1000);
 }
 
 /* ============================================================
@@ -1080,6 +1177,7 @@ function launchBall(vx, vy) {
     r: CONFIG.ballRadius,
     settled: false,
   });
+  playSound('launch');
 }
 
 /* 按钮发射：垂直下落 + 微小随机水平扰动（无需拖动时的快捷发射） */
@@ -1220,18 +1318,16 @@ function collideBallSegment(b, A, C, e) {
   const dy = b.y - py;
   const dist = Math.hypot(dx, dy);
   if (dist < b.r && dist > 0) {
-    // 法线（从线段指向弹珠）
     const nx = dx / dist;
     const ny = dy / dist;
-    // 把弹珠推到挡板表面之外
     const overlap = b.r - dist;
     b.x += nx * overlap;
     b.y += ny * overlap;
-    // 仅当朝挡板运动时反射
     const vDotN = b.vx * nx + b.vy * ny;
     if (vDotN < 0) {
       b.vx -= (1 + e) * vDotN * nx;
       b.vy -= (1 + e) * vDotN * ny;
+      playSound('rail');
     }
   }
 }
@@ -1331,6 +1427,7 @@ function updatePhysics() {
             b.vx -= (1 + CONFIG.restitution) * vDotN * nx;
             b.vy -= (1 + CONFIG.restitution) * vDotN * ny;
             b.vx += (Math.random() - 0.5) * 0.6;
+            playSound('peg');
           }
         }
       }
@@ -1342,6 +1439,11 @@ function updatePhysics() {
         addScore(slot.score);
         slot.subtotal += slot.score;
         slot.hits += 1;
+        
+        if (idx === targetSlotIndex) {
+          triggerBonusEffect(slot.x + slot.w / 2, slot.topY);
+        }
+        
         b.settled = true;
         balls.splice(i, 1);
       }
@@ -1394,31 +1496,52 @@ function render() {
 
   // —— 底部得分槽 ——
   const slotTop = slotRects[0].topY;
-  for (const s of slotRects) {
-    // 根据分值高低选择颜色（高分=暖色，低分=冷色）
-    const t = s.score / 100; // 0~1
-    const r = Math.round(70 + t * 185);
-    const g = Math.round(90 + t * 50);
-    const b2 = Math.round(160 - t * 100);
-    // 槽位渐变填充
-    const grad = ctx.createLinearGradient(0, slotTop, 0, H);
-    grad.addColorStop(0, `rgba(${r},${g},${b2},0.15)`);
-    grad.addColorStop(1, `rgba(${r},${g},${b2},0.55)`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(s.x + 1, slotTop, s.w - 2, H - slotTop);
+  for (let i = 0; i < slotRects.length; i++) {
+    const s = slotRects[i];
+    const isTarget = i === targetSlotIndex;
+    
+    if (isTarget) {
+      const pulse = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+      const grad = ctx.createLinearGradient(0, slotTop, 0, H);
+      grad.addColorStop(0, `rgba(255,215,0,${0.2 + pulse * 0.2})`);
+      grad.addColorStop(1, `rgba(255,165,0,${0.4 + pulse * 0.2})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(s.x + 1, slotTop, s.w - 2, H - slotTop);
+      
+      ctx.strokeStyle = `rgba(255,215,0,${0.5 + pulse * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(s.x + 1, slotTop); ctx.lineTo(s.x + 1, H);
+      ctx.moveTo(s.x + s.w - 1, slotTop); ctx.lineTo(s.x + s.w - 1, H);
+      ctx.stroke();
+    } else {
+      const t = s.score / 100;
+      const r = Math.round(70 + t * 185);
+      const g = Math.round(90 + t * 50);
+      const b2 = Math.round(160 - t * 100);
+      const grad = ctx.createLinearGradient(0, slotTop, 0, H);
+      grad.addColorStop(0, `rgba(${r},${g},${b2},0.15)`);
+      grad.addColorStop(1, `rgba(${r},${g},${b2},0.55)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(s.x + 1, slotTop, s.w - 2, H - slotTop);
 
-    // 槽位分隔线
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(s.x, slotTop); ctx.lineTo(s.x, H);
-    ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(s.x, slotTop); ctx.lineTo(s.x, H);
+      ctx.stroke();
+    }
 
-    // 分值文字
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = isTarget ? '#ffd166' : '#fff';
     ctx.font = 'bold 14px "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.fillText(s.score, s.x + s.w / 2, slotTop + 28);
+    
+    if (isTarget) {
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '10px "Courier New", monospace';
+      ctx.fillText('TARGET', s.x + s.w / 2, slotTop + 45);
+    }
 
     // —— 该槽命中次数显示区（位于分值文字下方） ——
     // 半透明小卡片背景
@@ -1464,7 +1587,6 @@ function render() {
 
   // —— 弹珠 ——
   for (const b of balls) {
-    // 渐变球体
     const grad = ctx.createRadialGradient(
       b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.1,
       b.x, b.y, b.r
@@ -1475,11 +1597,57 @@ function render() {
     ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
-    // 高光点
     ctx.beginPath();
     ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.3, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.fill();
+  }
+
+  // —— 奖励效果 ——
+  if (bonusEffect.active) {
+    bonusEffect.time += 0.05;
+    const { x, y, time } = bonusEffect;
+    const maxTime = 1.5;
+    
+    if (time < maxTime) {
+      const alpha = 1 - time / maxTime;
+      const scale = 1 + time * 2;
+      
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, 30, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,215,0,${alpha * 0.3})`;
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.arc(0, 0, 50, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,215,0,${alpha * 0.5})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.font = 'bold 24px "Courier New", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BONUS!', 0, 8);
+      
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 / 8) * i + time * 3;
+        const dist = 60 + Math.sin(time * 10 + i) * 10;
+        const px = Math.cos(angle) * dist;
+        const py = Math.sin(angle) * dist;
+        ctx.beginPath();
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,215,0,${alpha * 0.8})`;
+        ctx.fill();
+      }
+      
+      ctx.restore();
+    } else {
+      bonusEffect.active = false;
+    }
   }
 }
 
