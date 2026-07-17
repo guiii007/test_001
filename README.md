@@ -1,6 +1,6 @@
 # 🎯 Pinball-Bounce 弹珠游戏介绍
 
-> 🎮 **[🔗 在线试玩 →](https://guiii007.github.io/pinball-bounce/)**
+> 🎮 **[🔗 在线试玩 →](https://guiii007.github.io/pinball-bounce/plinko.html)**
 
 这是一个支持高度自定义的弹珠游戏，结合了物理碰撞、多地图切换与丰富的奖励机制。以下是游戏的核心功能说明：
 
